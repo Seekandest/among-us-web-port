@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+</head>
+<body>
+<!-- index.html -->
+<div id="game-container"></div>
+
+<div id="ui">
+  <button id="start-btn">Start</button>
+  <div id="status">Not started</div>
+</div>
+
+<style>
+  #game-container { position: relative; }
+  #ui {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 8px;
+    border-radius: 6px;
+    font-family: system-ui, sans-serif;
+  }
+</style>
+<script type="module" src="/src/main.js"></script>
+<script type="module">
+  const startBtn = document.getElementById('start-btn');
+  const status = document.getElementById('status');
+
+  startBtn.addEventListener('click', () => {
+    status.textContent = 'Game starting...';
+    // Later: call into your game/socket logic here
+  });
+</script>
+</body>
+</html>
