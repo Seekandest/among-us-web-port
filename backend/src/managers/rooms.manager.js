@@ -1,5 +1,5 @@
 /**
- * @type {{[key: number] : import ('../src/types/room.type').Room}}
+ * @type {{[key: number] : import ('../types/room.type.js').Room}}
  */
 const rooms = {};
 

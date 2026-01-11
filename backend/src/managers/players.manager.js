@@ -1,5 +1,5 @@
 /**
- * @type {{[key: string] : import('../src/types/room.type').Player}}
+ * @type {{[key: string] : import('../types/room.type.js').Player}}
  */
 const players = {};
 

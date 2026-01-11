@@ -1,6 +1,6 @@
 // tsconfig.json
 {
-  "allowJs": true,
-  "checkJs": true,
-  "strict": true
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true
 }
