@@ -3,42 +3,55 @@
  */
 const players = {};
 
-class PlayersManager {
+export const PlayersManager = {
 
     /**
-     *
-     * @param {number} id
+     * @param {string} id
      * @param {string} name
-     * @param {number} roomId
+     * @param {string} roomId
      * @param {string} color
      */
     createPlayer(id, name, roomId, color) {
-        if (!players[id]) {
-            players[id] = {
-                id: id,
+        const key = id;
+        if (!players[key]) {
+            players[key] = {
+                id: key,
                 name: name,
                 roomId: roomId,
                 state: {x: 0, y: 0, d: 'left'},
                 color: color,
+                isImposter: false,
+                isAlive: true,
             };
         }
-    }
+    },
 
     /**
-     * @param {number} id
+     * @param {string} id
      * */
     deletePlayer(id) {
         delete players[id];
-    }
+    },
 
     /**
-     * @param {number} id
+     * @param {string} id
      * @param {{x: number, y: number, d: string}} state
      */
     updatePlayerState(id, state) {
         if (players[id]) {
             players[id].state = state;
         }
-    }
+    },
+
+    /**
+     * @param {string} id
+     */
+    getPlayer(id) {
+        return players[id];
+    },
+
+    getAllPlayers() {
+        return Object.values(players);
+    },
 
 }

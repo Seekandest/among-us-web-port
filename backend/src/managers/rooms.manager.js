@@ -1,53 +1,49 @@
 /**
- * @type {{[key: number] : import ('../types/room.type.js').Room}}
+ * @type {{[key: string] : import ('../types/room.type.js').Room}}
  */
 const rooms = {};
 
-class RoomsManager {
-    constructor() {
-        this.players = {
+export const RoomsManager = {
+    players : {
             /**
-             * @param {number} roomId
-             * @param {import('../src/types/player.type').Player} player
+             * @param {string} roomId
+             * @param {import('../types/room.type.js').Player} player
              */
             add(roomId, player) {
                 if (!rooms[roomId]) return;
                 rooms[roomId].players[player.id] = player;
             },
             /**
-             * @param {number} roomId
-             * @param {import('../src/types/player.type').Player} player
+             * @param {string} roomId
+             * @param {import('../types/room.type.js').Player} player
              */
             remove(roomId, player) {
                 if (!rooms[roomId]) return;
                 delete rooms[roomId].players[player.id];
             },
             /**
-             * @param {number} roomId
-             * @param {number} playerId
+             * @param {string} roomId
+             * @param {string} playerId
              * @param {{x:number,y:number,d:string}} state
              */
             updateState(roomId, playerId, state) {
-                if (!(rooms[roomId] || rooms[roomId].players[playerId])) return;
+                if (!rooms[roomId] || !rooms[roomId].players[playerId]) return;
                 rooms[roomId].players[playerId].state = state;
             },
-        };
-    }
+    },
 
     /**
-     *
-     * @param {number} roomId
-     * @param {import('../src/types/player.type').Player} host
+     * @param {string} roomId
+     * @param {import('../types/room.type.js').Player} host
      */
     createRoom(roomId, host) {
         if (rooms[roomId]) return
 
         rooms[roomId] = {id: roomId, started: false, imposter: null, host: host, players: {}};
-    }
+    },
 
     /**
-     *
-     * @param {number} roomId
+     * @param {string} roomId
      */
     startGame(roomId) {
         if (!rooms[roomId]) return;
@@ -63,5 +59,3 @@ class RoomsManager {
 
     }
 }
-
-module.exports = new RoomsManager();

@@ -1,9 +1,9 @@
 /**
- * @typedef {{id: number, name: string, roomId: number, state: {x: number, y: number, d: string}, color: string}, isImposter: boolean, isAlive: boolean} Player
+ * @typedef {{id: string, name: string, roomId: string, state: {x: number, y: number, d: string}, color: string, isImposter: boolean, isAlive: boolean}} Player
  */
 
 /**
- * @typedef {{ id: number, started: boolean, imposter: number | null, host: Player, players: {[key: number]: Player}}} Room
+ * @typedef {{ id: string, started: boolean, imposter: string | null, host: Player, players: {[key: string]: Player}}} Room
  */
 
 export {}
