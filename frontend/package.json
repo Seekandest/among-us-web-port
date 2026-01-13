@@ -27,6 +27,7 @@
         "build-nolog": "vite build --config vite/config.prod.mjs"
     },
     "dependencies": {
+        "express": "^5.2.1",
         "phaser": "^3.90.0",
         "phaser3-rex-plugins": "^1.80.17",
         "react": "^19.0.0",

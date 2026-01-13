@@ -1,7 +1,7 @@
 /**
  * @type {{[key: string] : import ('../types/room.type.js').Room}}
  */
-const rooms = {};
+const rooms = {"1" : {id: "1", started: false, imposter: null, host: {id: "host1", name: "Host One", roomId: "1", state: {x: 0, y: 0, d: 'left'}, color: "red", isImposter: false, isAlive: true}, players: {}}};
 
 export const RoomsManager = {
     players : {
@@ -42,6 +42,10 @@ export const RoomsManager = {
         rooms[roomId] = {id: roomId, started: false, imposter: null, host: host, players: {}};
     },
 
+    fetchRooms() {
+        console.log("Fetching rooms:", rooms);
+        return Object.values(rooms);
+    },
     /**
      * @param {string} roomId
      */

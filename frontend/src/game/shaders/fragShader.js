@@ -36,4 +36,4 @@ const ColorSwapPipeline = new Phaser.Class({
         });
     }
 });
-export { ColorSwapPipeline };
+export {ColorSwapPipeline};

@@ -8,10 +8,10 @@ export const PlayersManager = {
     /**
      * @param {string} id
      * @param {string} name
-     * @param {string} roomId
+     * @param {string|null} roomId
      * @param {string} color
      */
-    createPlayer(id, name, roomId, color) {
+    createPlayer(id, name, color, roomId= null) {
         const key = id;
         if (!players[key]) {
             players[key] = {

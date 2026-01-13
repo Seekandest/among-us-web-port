@@ -73,27 +73,19 @@ export class Game extends Scene {
     }
 
     update(time, delta) {
+        if (this.wKey.isDown) {this.player.y += this.speed;}
+        if (this.aKey.isDown) {this.player.x -= this.speed;}
+        if (this.sKey.isDown) {this.player.y -= this.speed;}
+        if (this.dKey.isDown) {this.player.x += this.speed;}
+
         if (!this.wKey.isDown && !this.aKey.isDown && !this.sKey.isDown && !this.dKey.isDown) {
             this.player.anims.stop();
             this.player.setTexture('idleImage');
         } else {
+            this.socket.emit('player:move', {id: "1", x: this.player.x, y: this.player.y});
             if (!this.player.anims.isPlaying) {
                 this.player.anims.play('walk');
             }
         }
-        if (this.wKey.isDown) {
-            this.socket.emit('player:move', {id: "1", x: this.player.x, y: this.player.y + this.speed});
-        }
-        if (this.aKey.isDown) {
-            this.socket.emit('player:move', {id: "1", x: this.player.x - this.speed, y: this.player.y});
-        }
-        if (this.sKey.isDown) {
-            this.socket.emit('player:move', {id: "1", x: this.player.x, y: this.player.y - this.speed});
-        }
-        if (this.dKey.isDown) {
-            this.socket.emit('player:move', {id: "1", x: this.player.x + this.speed, y: this.player.y});
-        }
-
-
     }
 }

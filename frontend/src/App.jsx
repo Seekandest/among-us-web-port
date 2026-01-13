@@ -1,11 +1,11 @@
-import { useRef, useState, useEffect } from 'react';
+import {useRef, useState, useEffect} from 'react';
 
-import { PhaserGame } from './PhaserGame';
+import {PhaserGame} from './PhaserGame';
 import socketService from './services/socket';
-import Lobby from './pages/Lobby';
+import Room from './pages/Room';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('lobby'); // 'lobby' | 'game'
+  const [currentPage, setCurrentPage] = useState('room'); // 'room' | 'game'
   const [roomId, setRoomId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -32,9 +32,9 @@ function App() {
     setCurrentPage('game');
   };
 
-  const handleBackToLobby = () => {
+  const handleBackToRoom = () => {
     setRoomId(null);
-    setCurrentPage('lobby');
+    setCurrentPage('room');
   };
 
   return (
@@ -53,15 +53,15 @@ function App() {
         {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
       </div>
 
-      {currentPage === 'lobby' && (
-        <Lobby onJoinGame={handleJoinGame} />
+      {currentPage === 'room' && (
+        <Room onJoinGame={handleJoinGame}/>
       )}
 
       {currentPage === 'game' && (
-        <div style={{ position: 'relative' }}>
+        <div style={{position: 'relative'}}>
           {/* Back button */}
           <button
-            onClick={handleBackToLobby}
+            onClick={handleBackToRoom}
             style={{
               position: 'absolute',
               top: 10,
@@ -96,7 +96,7 @@ function App() {
             Room: {roomId}
           </div>
 
-          <PhaserGame ref={phaserRef} />
+          <PhaserGame ref={phaserRef}/>
         </div>
       )}
     </div>

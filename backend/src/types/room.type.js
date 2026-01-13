@@ -1,5 +1,5 @@
 /**
- * @typedef {{id: string, name: string, roomId: string, state: {x: number, y: number, d: string}, color: string, isImposter: boolean, isAlive: boolean}} Player
+ * @typedef {{id: string, name: string, roomId: string | null, state: {x: number, y: number, d: string}, color: string, isImposter: boolean, isAlive: boolean}} Player
  */
 
 /**
