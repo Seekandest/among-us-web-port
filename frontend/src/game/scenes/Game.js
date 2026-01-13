@@ -1,5 +1,7 @@
-import {EventBus} from '../EventBus';
-import {Scene} from 'phaser';
+import { socketService } from "../../services/socket.js"
+import { ColorSwapPipeline } from '../shaders/fragShader.js';
+import { EventBus } from '../EventBus';
+import { Scene } from 'phaser';
 
 export class Game extends Scene {
     constructor() {
@@ -11,6 +13,7 @@ export class Game extends Scene {
             'assets/walk/texture.png',
             'assets/walk/texture.json'
         );
+        this.load.image('idleImage', 'assets/sprites/Base/idle.png');
     }
     create() {
         this.anims.create({
@@ -32,39 +35,65 @@ export class Game extends Scene {
             frameRate: 12,
             repeat: -1
         });
+        const socket = socketService.getSocket();
+        this.socket = socket
+
 
         this.cameras.main.setBackgroundColor(0x00ff00);
         this.add.image(512, 384, 'background').setAlpha(0.5);
+        // Set up keyboard inputs
         this.wKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
         this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
         this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
         this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-        this.speed = 6; // pixels per second
-
+        this.speed = 6;
         EventBus.emit('current-scene-ready', this);
+
+        this.players = {};
+
+        // Create player sprite
         this.player = this.add.sprite(512, 384, 'player', 'Walk0001.png');
         this.player.setScale(0.5, 0.5);
-        this.player.play('walk');
-        this.player.setTint()
         this.player.clearTint();
+        // Apply custom shader pipeline
+        this.renderer.pipelines.add('ColorSwap', new ColorSwapPipeline(this.game));
+        this.player.setPipeline('ColorSwap');
+        this.player.pipeline.set3f('uColor', 1.0, 0.0, 0.0);
+        this.player.setBlendMode(Phaser.BlendModes.OVERLAY);
+        this.players["1"] = this.player;
 
-        this.player.setTint(0x0000ff);
+        socket.on('player:moved', (data) => {
+            console.log("player moved", data);
+            if (!this.players[data.id]) return
+            this.players[data.id].x = data.x;
+            this.players[data.id].y = data.y;
+        });
+
 
     }
 
     update(time, delta) {
-        this.player.setBlendMode(Phaser.BlendModes.OVERLAY);
+        if (!this.wKey.isDown && !this.aKey.isDown && !this.sKey.isDown && !this.dKey.isDown) {
+            this.player.anims.stop();
+            this.player.setTexture('idleImage');
+        } else {
+            if (!this.player.anims.isPlaying) {
+                this.player.anims.play('walk');
+            }
+        }
         if (this.wKey.isDown) {
-            this.player.y -= this.speed;
+            this.socket.emit('player:move', {id: "1", x: this.player.x, y: this.player.y + this.speed});
         }
         if (this.aKey.isDown) {
-            this.player.x -= this.speed;
+            this.socket.emit('player:move', {id: "1", x: this.player.x - this.speed, y: this.player.y});
         }
         if (this.sKey.isDown) {
-            this.player.y += this.speed;
+            this.socket.emit('player:move', {id: "1", x: this.player.x, y: this.player.y - this.speed});
         }
         if (this.dKey.isDown) {
-            this.player.x += this.speed;
+            this.socket.emit('player:move', {id: "1", x: this.player.x + this.speed, y: this.player.y});
         }
+
+
     }
 }

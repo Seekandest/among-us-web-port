@@ -1,67 +1,106 @@
-import {useRef, useState} from 'react';
+import { useRef, useState, useEffect } from 'react';
 
-import Phaser from 'phaser';
-import {PhaserGame} from './PhaserGame';
+import { PhaserGame } from './PhaserGame';
+import socketService from './services/socket';
+import Lobby from './pages/Lobby';
 
 function App() {
-  // The sprite can only be moved in the MainMenu Scene
-  const [canMoveSprite, setCanMoveSprite] = useState(true);
+  const [currentPage, setCurrentPage] = useState('lobby'); // 'lobby' | 'game'
+  const [roomId, setRoomId] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   //  References to the PhaserGame component (game and scene are exposed)
   const phaserRef = useRef();
-  const [spritePosition, setSpritePosition] = useState({x: 0, y: 0});
 
-  // kept temporarily to learn about Phaser and React integration
-  // const moveSprite = () => {
-  //
-  //   const scene = phaserRef.current.scene;
-  //
-  //   if (scene && scene.scene.key === 'MainMenu') {
-  //     // Get the update logo position
-  //     scene.moveLogo(({x, y}) => {
-  //
-  //       setSpritePosition({x, y});
-  //
-  //     });
-  //   }
-  // }
-  // const addSprite = () => {
-  //
-  //   const scene = phaserRef.current.scene;
-  //
-  //   if (scene) {
-  //     // Add more stars
-  //     const x = Phaser.Math.Between(64, scene.scale.width - 64);
-  //     const y = Phaser.Math.Between(64, scene.scale.height - 64);
-  //
-  //     //  `add.sprite` is a Phaser GameObjectFactory method and it returns a Sprite Game Object instance
-  //     const star = scene.add.sprite(x, y, 'star');
-  //
-  //     //  ... which you can then act upon. Here we create a Phaser Tween to fade the star sprite in and out.
-  //     //  You could, of course, do this from within the Phaser Scene code, but this is just an example
-  //     //  showing that Phaser objects and systems can be acted upon from outside of Phaser itself.
-  //     scene.add.tween({
-  //       targets: star,
-  //       duration: 500 + Math.random() * 1000,
-  //       alpha: 0,
-  //       yoyo: true,
-  //       repeat: -1
-  //     });
-  //   }
-  // }
+  // Initialize socket connection
+  useEffect(() => {
+    socketService.connect();
 
-  // Event emitted from the PhaserGame component
-  const currentScene = (scene) => {
+    // Update connection status
+    const socket = socketService.getSocket();
+    socket.on("connect", () => setIsConnected(true));
+    socket.on("disconnect", () => setIsConnected(false));
 
-    setCanMoveSprite(scene.scene.key !== 'MainMenu');
+    // Cleanup on unmount
+    return () => {
+      socketService.disconnect();
+    };
+  }, []);
 
-  }
+  const handleJoinGame = (joinedRoomId) => {
+    setRoomId(joinedRoomId);
+    setCurrentPage('game');
+  };
+
+  const handleBackToLobby = () => {
+    setRoomId(null);
+    setCurrentPage('lobby');
+  };
 
   return (
     <div id="app">
-      <PhaserGame ref={phaserRef} currentActiveScene={currentScene}/>
+      {/* Connection status indicator */}
+      <div style={{
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        padding: '5px 10px',
+        backgroundColor: isConnected ? '#4caf50' : '#f44336',
+        color: 'white',
+        borderRadius: '5px',
+        zIndex: 1000
+      }}>
+        {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+      </div>
+
+      {currentPage === 'lobby' && (
+        <Lobby onJoinGame={handleJoinGame} />
+      )}
+
+      {currentPage === 'game' && (
+        <div style={{ position: 'relative' }}>
+          {/* Back button */}
+          <button
+            onClick={handleBackToLobby}
+            style={{
+              position: 'absolute',
+              top: 10,
+              left: 10,
+              zIndex: 1000,
+              padding: '8px 16px',
+              backgroundColor: '#e94560',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            ← Leave
+          </button>
+
+          {/* Room ID display */}
+          <div style={{
+            position: 'absolute',
+            top: 10,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            padding: '8px 16px',
+            backgroundColor: '#16213e',
+            color: '#4ecca3',
+            borderRadius: 6,
+            fontFamily: 'monospace',
+            fontSize: 18,
+          }}>
+            Room: {roomId}
+          </div>
+
+          <PhaserGame ref={phaserRef} />
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
 export default App

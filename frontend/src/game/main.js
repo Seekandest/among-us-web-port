@@ -1,9 +1,10 @@
-import {Boot} from './scenes/Boot';
-import {Game} from './scenes/Game';
-import {GameOver} from './scenes/GameOver';
-import {MainMenu} from './scenes/MainMenu';
 import Phaser from 'phaser';
-import {Preloader} from './scenes/Preloader';
+
+// Expose Phaser globally for plugins that expect it (e.g., phaser3-rex-plugins)
+window.Phaser = Phaser;
+
+import ColorReplacePipelinePlugin from 'phaser3-rex-plugins/plugins/colorreplacepipeline-plugin.js';
+import {Game} from './scenes/Game';
 
 // Find out more information about the Game Config at:
 // https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
@@ -15,7 +16,14 @@ const config = {
     backgroundColor: '#028af8',
     scene: [
         Game
-    ]
+    ],
+    plugins: {
+        global: [{
+            key: 'rexColorReplacePipeline',
+            plugin: ColorReplacePipelinePlugin,
+            start: true
+        }]
+    }
 };
 
 const StartGame = (parent) => {
