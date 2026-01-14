@@ -17,12 +17,11 @@ const io = new Server({
 
 io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
-
     registerRoomEvents(io, socket);
     registerGameEvents(io, socket);
-    socket.on("disconnect", () => {console.log("Client disconnected:", socket.id);});
 });
 
+// TODO move to a separate routes file
 app.get("/status", (req, res) => {res.send("OK");});
 app.get("/rooms", (req, res) => {res.json(RoomsManager.fetchRooms());});
 app.get("/player/room/:playerId", (req, res) => {

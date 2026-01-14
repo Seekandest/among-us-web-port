@@ -62,8 +62,9 @@ export class Game extends Scene {
         // this.player.setBlendMode(Phaser.BlendModes.OVERLAY);
         // this.players["1"] = this.player;
 
-
-        const data = fetch(`http://localhost:3001/player/room/${socket.id}`)
+        const playerId = localStorage.getItem("playerId");
+        console.log("Fetching room data for playerId:", playerId, "socket id:", socket.id);
+        const data = fetch(`http://localhost:3001/player/room/${playerId}`)
             .then(response => response.json())
             .then(data => {
                 console.log("room joined event received");
@@ -75,6 +76,7 @@ export class Game extends Scene {
                 this.player.setScale(0.5, 0.5);
                 this.players[data.player.id] = this.player;
                 console.log("Created own player sprite:", this.player);
+                console.log("Room players:", this.room.players);
                 // Create sprites for existing players in the room
 
                 Object.values(this.room.players).forEach((player) => {
@@ -102,10 +104,12 @@ export class Game extends Scene {
             this.players[data.id].y = data.y;
         });
         socket.on('player:animation', (data) => {
-            console.log("player animation", data);
+            console.log("player animation", data, this.players);
             if (!this.players[data.id]) return
+            const p = this.players[data.id];
             if (data.moving) {
-                const p = this.players[data.id];
+
+                console.log(p)
                 if (!p.anims.isPlaying) {
                     p.anims.play('walk');
                 }

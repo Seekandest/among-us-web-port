@@ -1,17 +1,27 @@
 import React, {useState, useEffect} from 'react';
 import socketService from '../services/socket';
+import style from './room.module.css';
 
 /**
  * @param {{onJoinGame: (roomId: string) => void}} props
  */
 export function Room({onJoinGame}) {
   const [playerName, setPlayerName] = useState('');
-  const [roomId, setRoomId] = useState('1');
+  // const [roomId, setRoomId] = useState('1');
   const [isRegistered, setIsRegistered] = useState(false);
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState({});
 
   const socket = socketService.getSocket();
+
+  // Load player name from localStorage on mount
+  useEffect(() => {
+    const savedName = localStorage.getItem('playerName');
+    if (savedName) {
+      setPlayerName(savedName);
+    }
+  }, []);
+
   useEffect(() => {
     const onRoomCreated = (data) => {
       // TODO FIX LOGIC
@@ -33,11 +43,17 @@ export function Room({onJoinGame}) {
     // socket.on('room:joined', onRoomJoined);
     socket.on('player:registered', onPlayerRegistered);
 
+    fetch('http://localhost:3001/rooms')
+      .then(response => response.json())
+      .then(data => {setRooms(data)})
+      .catch(error => console.error('Error fetching rooms:', error));
+
     return () => {
       socket.off('room:created', onRoomCreated);
       // socket.off('room:joined', onRoomJoined);
       socket.off('player:registered', onPlayerRegistered);
     };
+
   }, [socket, onJoinGame]);
 
 
@@ -46,11 +62,21 @@ export function Room({onJoinGame}) {
       setError('Please enter a name');
       return;
     }
-    const playerId = socket.id;
-    if (!playerId) {
+
+    if (!socket.id) {
       setError('Not connected to server');
       return;
     }
+    let playerId;
+    if (localStorage.getItem("playerId")) {
+      playerId = localStorage.getItem("playerId");
+    } else {
+      playerId = generateUserId();
+      localStorage.setItem("playerId", playerId);
+    }
+
+    // Save name to localStorage
+    localStorage.setItem('playerName', playerName.trim());
 
     socket.emit('player:register', {
       id: playerId, name: playerName.trim(), color: getRandomColor(),
@@ -66,9 +92,12 @@ export function Room({onJoinGame}) {
     }
 
     const newRoomId = generateRoomId();
+    const playerId = localStorage.getItem("playerId");
+    // TODO handel missing playerId case
     socket.emit('room:create', {
-      hostId: socket.id, roomId: newRoomId,
+      hostId: playerId, roomId: newRoomId,
     });
+    handleJoinRoom(newRoomId);
   };
 
   const handleFetchRooms = () => {
@@ -82,10 +111,11 @@ export function Room({onJoinGame}) {
       setError('Please register first');
       return;
     }
-
+    console.log('Joining room:', roomId)
+    const playerId = localStorage.getItem("playerId");
+    // TODO handel missing playerId case
     socket.emit('room:join', {
-      // TODO testing purpose only remove later
-      playerId: socket.id, roomId: "1",
+      playerId: playerId, roomId: roomId,
     });
 
     onJoinGame(roomId);
@@ -110,35 +140,21 @@ export function Room({onJoinGame}) {
         </button>
       </div>) : (<div style={styles.section}>
         <p style={styles.welcome}>Welcome, {playerName}!</p>
-
-        <button onClick={handleCreateRoom} style={styles.buttonPrimary}>
-          Create Room
-        </button>
-
-        <div style={styles.divider}>
-          <span>or</span>
-        </div>
-
-        <button onClick={handleJoinRoom} style={styles.button}>
-          Join Room
-        </button>
-        <button onClick={handleFetchRooms} style={styles.button}>
-          Refresh Rooms
-        </button>
         <div>
           {rooms.length > 0 ? ( <div>
             <h3 style={{color: '#fff'}}>Available Rooms:</h3>
             <ul style={{listStyleType: 'none', padding: 0}}>
               {Object.values(rooms).map((room) => (
-                <li key={room.id} style={{marginBottom: 8}}>
+                <li className={style.lobbyCard} key={room.id} style={{marginBottom: 8}} onClick={() => handleJoinRoom(room.id)}>
                   <span style={{color: '#4ecca3', fontWeight: 'bold'}}>{room.id}</span> - Host: <span style={{color: '#f39c12'}}>{room.host.name}</span> - Players: <span style={{color: '#f39c12'}}>{Object.keys(room.players).length}</span>
-                  <button onClick={() => handleJoinRoom(room.id)}></button>
                 </li>
               ))}
             </ul>
           </div>) : (<p style={{color: '#aaa'}}>No available rooms. Create one!</p>)}
         </div>
-
+        <button onClick={handleCreateRoom} style={styles.buttonPrimary}>
+          Create Room
+        </button>
       </div>)}
 
       {error && <p style={styles.error}>{error}</p>}
@@ -150,6 +166,15 @@ function generateRoomId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
   for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+function generateUserId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 16; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
