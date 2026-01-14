@@ -40,7 +40,7 @@ export class Game extends Scene {
 
 
         this.cameras.main.setBackgroundColor(0x00ff00);
-        this.add.image(512, 384, 'background').setAlpha(0.5);
+        // this.add.image(512, 384, 'background').setAlpha(0.5);
         // Set up keyboard inputs
         this.wKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
         this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
@@ -52,39 +52,87 @@ export class Game extends Scene {
         this.players = {};
 
         // Create player sprite
-        this.player = this.add.sprite(512, 384, 'player', 'Walk0001.png');
-        this.player.setScale(0.5, 0.5);
-        this.player.clearTint();
-        // Apply custom shader pipeline
-        this.renderer.pipelines.add('ColorSwap', new ColorSwapPipeline(this.game));
-        this.player.setPipeline('ColorSwap');
-        this.player.pipeline.set3f('uColor', 1.0, 0.0, 0.0);
-        this.player.setBlendMode(Phaser.BlendModes.OVERLAY);
-        this.players["1"] = this.player;
+        // this.player = this.add.sprite(512, 384, 'player', 'Walk0001.png');
+        // this.player.setScale(0.5, 0.5);
+        // this.player.clearTint();
+        // // Apply custom shader pipeline
+        // this.renderer.pipelines.add('ColorSwap', new ColorSwapPipeline(this.game));
+        // this.player.setPipeline('ColorSwap');
+        // this.player.pipeline.set3f('uColor', 1.0, 0.0, 0.0);
+        // this.player.setBlendMode(Phaser.BlendModes.OVERLAY);
+        // this.players["1"] = this.player;
 
+
+        const data = fetch(`http://localhost:3001/player/room/${socket.id}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("room joined event received");
+                console.log("room joined data:", data);
+                this.room = data.room;
+                console.log("Joined room:", data);
+                this.player = this.add.sprite(data.player.state.x, data.player.state.y, 'player', 'Walk0001.png');
+                this.playerObj = data.player;
+                this.player.setScale(0.5, 0.5);
+                this.players[data.player.id] = this.player;
+                console.log("Created own player sprite:", this.player);
+                // Create sprites for existing players in the room
+
+                Object.values(this.room.players).forEach((player) => {
+                    if (player.id === this.playerObj.id) return; // Skip own player
+                    console.log("Adding existing player:", player);
+                    const otherPlayer = this.add.sprite(player.state.x, player.state.y, 'player', 'Walk0001.png');
+                    otherPlayer.setScale(0.5, 0.5);
+                    this.players[player.id] = otherPlayer;
+                });})
+            .catch(error => {
+                console.error('Error fetching room data:', error);
+            });
+
+
+        socket.on('player:joined', (data) => {
+            console.log("player joined", data);
+            const newPlayer = this.add.sprite(data.player.state.x, data.player.state.y, 'player', 'Walk0001.png');
+            newPlayer.setScale(0.5, 0.5);
+            this.players[data.player.id] = newPlayer;
+        });
         socket.on('player:moved', (data) => {
             console.log("player moved", data);
             if (!this.players[data.id]) return
             this.players[data.id].x = data.x;
             this.players[data.id].y = data.y;
         });
-
+        socket.on('player:animation', (data) => {
+            console.log("player animation", data);
+            if (!this.players[data.id]) return
+            if (data.moving) {
+                const p = this.players[data.id];
+                if (!p.anims.isPlaying) {
+                    p.anims.play('walk');
+                }
+            } else {
+                p.anims.stop();
+                p.setTexture('idleImage');
+            }
+        });
 
     }
 
     update(time, delta) {
-        if (this.wKey.isDown) {this.player.y += this.speed;}
+        if (!this.player) return;
+        if (this.wKey.isDown) {this.player.y -= this.speed;}
         if (this.aKey.isDown) {this.player.x -= this.speed;}
-        if (this.sKey.isDown) {this.player.y -= this.speed;}
+        if (this.sKey.isDown) {this.player.y += this.speed;}
         if (this.dKey.isDown) {this.player.x += this.speed;}
 
         if (!this.wKey.isDown && !this.aKey.isDown && !this.sKey.isDown && !this.dKey.isDown) {
-            this.player.anims.stop();
-            this.player.setTexture('idleImage');
+            if (this.player.anims.isPlaying) {
+                this.socket.emit('player:animation', {id: this.playerObj.id, roomId: this.room.id, moving: false});
+            }
         } else {
-            this.socket.emit('player:move', {id: "1", x: this.player.x, y: this.player.y});
+            this.socket.emit('player:move', {id: this.playerObj.id, x: this.player.x, y: this.player.y, roomId: this.room.id, d: this.playerObj.state.d});
             if (!this.player.anims.isPlaying) {
-                this.player.anims.play('walk');
+                console.log("Stopping walk");
+                this.socket.emit('player:animation', {id: this.playerObj.id, roomId: this.room.id, moving: true});
             }
         }
     }

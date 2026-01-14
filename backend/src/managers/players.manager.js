@@ -18,7 +18,7 @@ export const PlayersManager = {
                 id: key,
                 name: name,
                 roomId: roomId,
-                state: {x: 0, y: 0, d: 'left'},
+                state: {x: 0, y: 0, d: 'left', moving: false},
                 color: color,
                 isImposter: false,
                 isAlive: true,
@@ -54,4 +54,9 @@ export const PlayersManager = {
         return Object.values(players);
     },
 
+    setRoomId(id, roomId) {
+        if (players[id]) {
+            players[id].roomId = roomId;
+        }
+    },
 }

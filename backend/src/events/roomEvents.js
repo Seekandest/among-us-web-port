@@ -8,6 +8,7 @@ export const registerRoomEvents = (io, socket) => {
     const playerRegister = (data) => {
         console.log("Player register received:", data);
         PlayersManager.createPlayer(data.id, data.name, data.color);
+        socket.emit('player:registered', {playerId: data.id});
     }
     /**
      * @param {{hostId : string, roomId}} data
@@ -25,11 +26,17 @@ export const registerRoomEvents = (io, socket) => {
      */
     const roomJoin = (data) => {
         console.log("Room join received:", data);
-        const player = PlayersManager.getPlayer(data.playerId);
+        let player = PlayersManager.getPlayer(data.playerId);
         if (player) {
+            // TODO setup return values to reduce method calls
+            PlayersManager.setRoomId(player.id, data.roomId)
             RoomsManager.players.add(data.roomId, player);
+            player = PlayersManager.getPlayer(data.playerId);
+            console.log("Player after setting roomId and adding to room:", player);
+            const room = RoomsManager.fetchRoom(data.roomId);
             socket.join(data.roomId)
-            socket.emit("room:joined", {roomId: data.roomId});
+            socket.emit("room:joined", {roomId: data.roomId, room, player});
+            socket.to(data.roomId).emit("player:joined", {player, roomId: data.roomId});
         }
     }
     socket.on("player:register", playerRegister);

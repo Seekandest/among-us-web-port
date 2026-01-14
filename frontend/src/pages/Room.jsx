@@ -6,31 +6,40 @@ import socketService from '../services/socket';
  */
 export function Room({onJoinGame}) {
   const [playerName, setPlayerName] = useState('');
-  const [roomId, setRoomId] = useState('');
+  const [roomId, setRoomId] = useState('1');
   const [isRegistered, setIsRegistered] = useState(false);
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState({});
 
   const socket = socketService.getSocket();
-
   useEffect(() => {
-    // Listen for room events
-    socket.on('room:created', (data) => {
+    const onRoomCreated = (data) => {
+      // TODO FIX LOGIC
       console.log('Room created:', data);
-      onJoinGame(data.roomId);
-    });
+    };
 
-    socket.on('room:joined', (data) => {
+    const onRoomJoined = (data) => {
       console.log('Joined room:', data);
-      socket.join(data.roomId);
+      // Client should NOT call socket.join(...)
       onJoinGame(data.roomId);
-    });
+    };
+
+    const onPlayerRegistered = () => {
+      console.log('Player registered');
+      setIsRegistered(true);
+    };
+
+    socket.on('room:created', onRoomCreated);
+    // socket.on('room:joined', onRoomJoined);
+    socket.on('player:registered', onPlayerRegistered);
 
     return () => {
-      socket.off('room:created');
-      socket.off('room:joined');
+      socket.off('room:created', onRoomCreated);
+      // socket.off('room:joined', onRoomJoined);
+      socket.off('player:registered', onPlayerRegistered);
     };
   }, [socket, onJoinGame]);
+
 
   const handleRegister = () => {
     if (!playerName.trim()) {
@@ -47,7 +56,6 @@ export function Room({onJoinGame}) {
       id: playerId, name: playerName.trim(), color: getRandomColor(),
     });
 
-    setIsRegistered(true);
     setError('');
   };
 
@@ -76,8 +84,10 @@ export function Room({onJoinGame}) {
     }
 
     socket.emit('room:join', {
-      playerId: socket.id, roomId: roomId.trim().toUpperCase(),
+      // TODO testing purpose only remove later
+      playerId: socket.id, roomId: "1",
     });
+
     onJoinGame(roomId);
   };
 

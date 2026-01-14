@@ -1,5 +1,7 @@
+import {PlayersManager} from "./players.manager.js";
+
 /**
- * @type {{[key: string] : import ('../types/room.type.js').Room}}
+ * @type {{[key: string]: import('../types/room.type.js').GameRoom}}
  */
 const rooms = {"1" : {id: "1", started: false, imposter: null, host: {id: "host1", name: "Host One", roomId: "1", state: {x: 0, y: 0, d: 'left'}, color: "red", isImposter: false, isAlive: true}, players: {}}};
 
@@ -11,6 +13,7 @@ export const RoomsManager = {
              */
             add(roomId, player) {
                 if (!rooms[roomId]) return;
+
                 rooms[roomId].players[player.id] = player;
             },
             /**
@@ -45,6 +48,12 @@ export const RoomsManager = {
     fetchRooms() {
         console.log("Fetching rooms:", rooms);
         return Object.values(rooms);
+    },
+    /**
+     * @param {string} roomId
+     */
+    fetchRoom(roomId) {
+        return rooms[roomId];
     },
     /**
      * @param {string} roomId

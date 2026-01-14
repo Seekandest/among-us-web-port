@@ -4,7 +4,7 @@ export const registerGameEvents = (io, socket) => {
      */
     const playerJoin = (data) => {
         console.log("Player join received:", data);
-        // NEED TO SEND THE FULL PLAYER OBJECT
+        // TODO NEED TO SEND THE FULL PLAYER OBJECT
         socket.to(data.roomId).emit("player:joined", data);
     }
     /**
@@ -16,7 +16,7 @@ export const registerGameEvents = (io, socket) => {
     }
 
     /**
-     * @param {{playerId: string, roomId: string, state: {x: number, y: number, d: string}}} data
+     * @param {{playerId: string, roomId: string, state: {x: number, y: number, d: string, moving: boolean}}} data
      */
     const playerMove = (data) => {
         // will setup later, using just coords for now
@@ -26,9 +26,15 @@ export const registerGameEvents = (io, socket) => {
         socket.to(data.roomId).emit("player:moved", data);
     }
 
+    const animationShift = (data) => {
+        console.log("Animation shift received:", data);
+        io.to(data.roomId).emit("player:animation", data);
+    }
+
     socket.on("player:join", playerJoin);
     socket.on("player:leave", playerLeave);
     socket.on("player:move", playerMove);
+    socket.on("player:animation", animationShift);
     // socket.on("game:start", gameStart);
     // socket.on("game:end", gameEnd);
 

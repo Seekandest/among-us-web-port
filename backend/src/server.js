@@ -4,6 +4,7 @@ import cors from "cors";
 import { registerRoomEvents } from "./events/roomEvents.js";
 import { registerGameEvents } from "./events/gameEvents.js";
 import { RoomsManager } from "./managers/rooms.manager.js";
+import {PlayersManager} from "./managers/players.manager.js";
 
 const app = express();
 app.use(cors({ origin: "http://localhost:8080" }));
@@ -24,6 +25,23 @@ io.on("connection", (socket) => {
 
 app.get("/status", (req, res) => {res.send("OK");});
 app.get("/rooms", (req, res) => {res.json(RoomsManager.fetchRooms());});
+app.get("/player/room/:playerId", (req, res) => {
+    const playerId = req.params.playerId;
+    const player = PlayersManager.getPlayer(playerId);
+    if (!player) {
+        console.log("Player not found:", playerId);
+        res.status(404).json({error: "Player not found"});
+        return;
+    }
+    const room = RoomsManager.fetchRoom(player.roomId);
+    if (!room) {
+        console.log("Room not found for player:", playerId, player);
+        res.status(404).json({error: "Room not found"});
+        return;
+    }
+    console.log("Fetched room for player:", playerId, room, player);
+    res.json({room, player});
+});
 
 io.listen(3000);
 console.log("Socket.io server running on port 3000");
