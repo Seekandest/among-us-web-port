@@ -11,7 +11,7 @@ export const PhaserGame = forwardRef(function PhaserGame({currentActiveScene}, r
     if (game.current === undefined) {
       game.current = StartGame("game-container");
 
-      if (ref !== null) {
+      if (ref && ref !== null) {
         ref.current = {game: game.current, scene: null};
       }
     }
@@ -33,7 +33,9 @@ export const PhaserGame = forwardRef(function PhaserGame({currentActiveScene}, r
       if (currentActiveScene instanceof Function) {
         currentActiveScene(currentScene);
       }
-      ref.current.scene = currentScene;
+      if (ref && ref.current) {
+        ref.current.scene = currentScene;
+      }
 
     });
 

@@ -1,0 +1,51 @@
+.statusBadge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 5px 10px;
+  background-color: #222;
+  color: white;
+  border-radius: 5px;
+  z-index: 1000;
+}
+
+.connected {
+  background-color: #4caf50;
+}
+
+.disconnected {
+  background-color: #f44336;
+}
+
+.gameWrapper {
+  position: relative;
+}
+
+.backButton {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  padding: 8px 16px;
+  background-color: #e94560;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.roomTag {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 8px 16px;
+  background-color: #16213e;
+  color: #4ecca3;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 18px;
+}
+

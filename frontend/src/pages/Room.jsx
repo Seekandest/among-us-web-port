@@ -1,14 +1,15 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import socketService from '../services/socket';
 import style from './room.module.css';
 
 /**
  * @param {{onJoinGame: (roomId: string) => void}} props
  */
-export function Room({onJoinGame}) {
+export function Lobby({onJoinGame}) {
   const [playerName, setPlayerName] = useState('');
   // const [roomId, setRoomId] = useState('1');
   const [isRegistered, setIsRegistered] = useState(false);
+  const isRegisteredRef = useRef(false);
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState({});
 
@@ -24,7 +25,7 @@ export function Room({onJoinGame}) {
 
   useEffect(() => {
     const onRoomCreated = (data) => {
-      // TODO FIX LOGIC
+      handleJoinRoom(data.roomId);
       console.log('Room created:', data);
     };
 
@@ -36,6 +37,7 @@ export function Room({onJoinGame}) {
 
     const onPlayerRegistered = () => {
       console.log('Player registered');
+      isRegisteredRef.current = true;
       setIsRegistered(true);
     };
 
@@ -56,7 +58,6 @@ export function Room({onJoinGame}) {
 
   }, [socket, onJoinGame]);
 
-
   const handleRegister = () => {
     if (!playerName.trim()) {
       setError('Please enter a name');
@@ -67,13 +68,7 @@ export function Room({onJoinGame}) {
       setError('Not connected to server');
       return;
     }
-    let playerId;
-    if (localStorage.getItem("playerId")) {
-      playerId = localStorage.getItem("playerId");
-    } else {
-      playerId = generateUserId();
-      localStorage.setItem("playerId", playerId);
-    }
+    const playerId = getPlayerId();
 
     // Save name to localStorage
     localStorage.setItem('playerName', playerName.trim());
@@ -86,18 +81,17 @@ export function Room({onJoinGame}) {
   };
 
   const handleCreateRoom = () => {
-    if (!isRegistered) {
+    if (!isRegisteredRef.current) {
       setError('Please register first');
       return;
     }
 
     const newRoomId = generateRoomId();
-    const playerId = localStorage.getItem("playerId");
-    // TODO handel missing playerId case
+    const playerId = getPlayerId();
     socket.emit('room:create', {
       hostId: playerId, roomId: newRoomId,
     });
-    handleJoinRoom(newRoomId);
+    // handleJoinRoom(newRoomId);
   };
 
   const handleFetchRooms = () => {
@@ -107,13 +101,12 @@ export function Room({onJoinGame}) {
       .catch(error => console.error('Error fetching rooms:', error));
   }
   const handleJoinRoom = (roomId) => {
-    if (!isRegistered) {
+    if (!isRegisteredRef.current) {
       setError('Please register first');
       return;
     }
     console.log('Joining room:', roomId)
-    const playerId = localStorage.getItem("playerId");
-    // TODO handel missing playerId case
+    const playerId = getPlayerId();
     socket.emit('room:join', {
       playerId: playerId, roomId: roomId,
     });
@@ -178,6 +171,15 @@ function generateUserId() {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+const getPlayerId = () => {
+  const playerId = localStorage.getItem('playerId');
+  if (!playerId) {
+    const id = generateUserId();
+    localStorage.setItem('playerId', id);
+    return id;
+  }
+  return playerId;
 }
 
 function getRandomColor() {
@@ -257,5 +259,5 @@ const styles = {
   },
 };
 
-export default Room;
+export default Lobby;
 

@@ -13,8 +13,9 @@ export const RoomsManager = {
              */
             add(roomId, player) {
                 if (!rooms[roomId]) return;
-
+                player = PlayersManager.setRoomId(player.id, roomId)
                 rooms[roomId].players[player.id] = player;
+                return player;
             },
             /**
              * @param {string} roomId
@@ -23,6 +24,12 @@ export const RoomsManager = {
             remove(roomId, player) {
                 if (!rooms[roomId]) return;
                 delete rooms[roomId].players[player.id];
+                const remainingPlayers = Object.values(rooms[roomId].players);
+                if (remainingPlayers.length < 1) {
+                    delete rooms[roomId];
+                    return;
+                }
+                if (rooms[roomId].host.id === player.id) {rooms[roomId].host = remainingPlayers[0];}
             },
             /**
              * @param {string} roomId

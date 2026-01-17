@@ -35,6 +35,27 @@ export class Game extends Scene {
             frameRate: 12,
             repeat: -1
         });
+        /**
+         * color is a hex string like "#ff0000"
+         * @param sprite
+         * @param { string } color
+         */
+        this.setColor = (sprite, color) => {
+            console.log(color)
+            const rgb = Phaser.Display.Color.HexStringToColor(color);
+            const r = rgb.red / 255;
+            const g = rgb.green / 255;
+            const b = rgb.blue / 255;
+            sprite.clearTint();
+
+            // Use unique pipeline name per sprite to avoid color bleeding
+            const pipelineName = `ColorSwap_${Date.now()}_${Math.random()}`;
+            this.renderer.pipelines.add(pipelineName, new ColorSwapPipeline(this.game));
+            sprite.setPipeline(pipelineName);
+            sprite.pipeline.set3f('uColor', r, g, b);
+            sprite.setBlendMode(Phaser.BlendModes.OVERLAY);
+
+        }
         const socket = socketService.getSocket();
         this.socket = socket
 
@@ -50,17 +71,7 @@ export class Game extends Scene {
         EventBus.emit('current-scene-ready', this);
 
         this.players = {};
-
-        // Create player sprite
-        // this.player = this.add.sprite(512, 384, 'player', 'Walk0001.png');
-        // this.player.setScale(0.5, 0.5);
-        // this.player.clearTint();
-        // // Apply custom shader pipeline
-        // this.renderer.pipelines.add('ColorSwap', new ColorSwapPipeline(this.game));
-        // this.player.setPipeline('ColorSwap');
-        // this.player.pipeline.set3f('uColor', 1.0, 0.0, 0.0);
-        // this.player.setBlendMode(Phaser.BlendModes.OVERLAY);
-        // this.players["1"] = this.player;
+        console.log("Players Modified", this.players);
 
         const playerId = localStorage.getItem("playerId");
         console.log("Fetching room data for playerId:", playerId, "socket id:", socket.id);
@@ -69,15 +80,16 @@ export class Game extends Scene {
             .then(data => {
                 console.log("room joined event received");
                 console.log("room joined data:", data);
+                if (!this.sys || !this.sys.displayList) return; // Scene not ready or destroyed
                 this.room = data.room;
-                console.log("Joined room:", data);
                 this.player = this.add.sprite(data.player.state.x, data.player.state.y, 'player', 'Walk0001.png');
+                console.log("Player Sprite", this.player)
                 this.playerObj = data.player;
                 this.player.setScale(0.5, 0.5);
+                this.setColor(this.player, data.player.color);
                 this.players[data.player.id] = this.player;
-                console.log("Created own player sprite:", this.player);
-                console.log("Room players:", this.room.players);
-                // Create sprites for existing players in the room
+                console.log("Created own player sprite:", this.player, this.players);
+
 
                 Object.values(this.room.players).forEach((player) => {
                     if (player.id === this.playerObj.id) return; // Skip own player
@@ -85,6 +97,8 @@ export class Game extends Scene {
                     const otherPlayer = this.add.sprite(player.state.x, player.state.y, 'player', 'Walk0001.png');
                     otherPlayer.setScale(0.5, 0.5);
                     this.players[player.id] = otherPlayer;
+                    this.setColor(otherPlayer, player.color);
+                    console.log("Players Modified", this.players);
                 });})
             .catch(error => {
                 console.error('Error fetching room data:', error);
@@ -93,20 +107,35 @@ export class Game extends Scene {
 
         socket.on('player:joined', (data) => {
             console.log("player joined", data);
+            if (!this.sys || !this.sys.displayList) return; // Scene not ready or destroyed
             const newPlayer = this.add.sprite(data.player.state.x, data.player.state.y, 'player', 'Walk0001.png');
             newPlayer.setScale(0.5, 0.5);
             this.players[data.player.id] = newPlayer;
+            // TODO unify the adding player logic into a function
+            this.setColor(newPlayer, data.player.color);
+            console.log("Players Modified", this.players);
+        });
+        socket.on('player:left', (data) => {
+            console.log("player left", data);
+            if (!this.players[data.playerId]) return;
+            if (this.sys && this.sys.displayList) {
+                this.players[data.playerId].destroy();
+            }
+            delete this.players[data.playerId];
+            console.log("Players Modified", this.players);
         });
         socket.on('player:moved', (data) => {
             console.log("player moved", data);
-            if (!this.players[data.id]) return
+            if (!this.players[data.id]) return;
+            // Update position - sprite x/y is safe even if scene is transitioning
             this.players[data.id].x = data.x;
             this.players[data.id].y = data.y;
         });
         socket.on('player:animation', (data) => {
             console.log("player animation", data, this.players);
-            if (!this.players[data.id]) return
+            if (!this.players[data.id]) return;
             const p = this.players[data.id];
+            if (!p.anims) return; // Sprite may have been destroyed
             if (data.moving) {
 
                 console.log(p)
@@ -138,6 +167,15 @@ export class Game extends Scene {
                 console.log("Stopping walk");
                 this.socket.emit('player:animation', {id: this.playerObj.id, roomId: this.room.id, moving: true});
             }
+        }
+    }
+
+    shutdown() {
+        if (this.socket) {
+            this.socket.off('player:joined');
+            this.socket.off('player:left');
+            this.socket.off('player:moved');
+            this.socket.off('player:animation');
         }
     }
 }

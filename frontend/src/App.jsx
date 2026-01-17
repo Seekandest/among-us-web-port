@@ -1,102 +1,76 @@
-import {useRef, useState, useEffect} from 'react';
+import {useState, useEffect} from 'react';
 
 import {PhaserGame} from './PhaserGame';
 import socketService from './services/socket';
-import Room from './pages/Room';
+import Lobby from './pages/Room';
+import styles from './App.module.css';
+
+const PAGES = {LOBBY: 'lobby', GAME: 'game'};
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('room'); // 'room' | 'game'
+  const [currentPage, setCurrentPage] = useState(PAGES.LOBBY);
   const [roomId, setRoomId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [socket, setSocket] = useState(null);
 
-  //  References to the PhaserGame component (game and scene are exposed)
-  const phaserRef = useRef();
-
-  // Initialize socket connection
   useEffect(() => {
     socketService.connect();
+    const sockett = socketService.getSocket();
+    if (!sockett) {
+      console.warn('Socket unavailable after connect()');
+      return;
+    }
+    setSocket(sockett);
 
-    // Update connection status
-    const socket = socketService.getSocket();
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
+    const handleConnect = () => setIsConnected(true);
+    const handleDisconnect = () => setIsConnected(false);
 
-    // Cleanup on unmount
+    sockett.on('connect', handleConnect);
+    sockett.on('disconnect', handleDisconnect);
+
     return () => {
+      sockett.off('connect', handleConnect);
+      sockett.off('disconnect', handleDisconnect);
       socketService.disconnect();
     };
   }, []);
 
   const handleJoinGame = (joinedRoomId) => {
     setRoomId(joinedRoomId);
-    setCurrentPage('game');
+    setCurrentPage(PAGES.GAME);
   };
 
   const handleBackToRoom = () => {
+    const playerId = localStorage.getItem('playerId');
+    if (socket && playerId) socket.emit('room:leave', {playerId});
     setRoomId(null);
-    setCurrentPage('room');
+    setCurrentPage(PAGES.LOBBY);
   };
 
   return (
     <div id="app">
-      {/* Connection status indicator */}
-      <div style={{
-        position: 'absolute',
-        top: 10,
-        right: 10,
-        padding: '5px 10px',
-        backgroundColor: isConnected ? '#4caf50' : '#f44336',
-        color: 'white',
-        borderRadius: '5px',
-        zIndex: 1000
-      }}>
+      <div className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
         {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
       </div>
 
-      {currentPage === 'room' && (
-        <Room onJoinGame={handleJoinGame}/>
+      {currentPage === PAGES.LOBBY && (
+        <Lobby onJoinGame={handleJoinGame}/>
       )}
 
-      {currentPage === 'game' && (
-        <div style={{position: 'relative'}}>
-          {/* Back button */}
+      {currentPage === PAGES.GAME && (
+        <div className={styles.gameWrapper}>
           <button
             onClick={handleBackToRoom}
-            style={{
-              position: 'absolute',
-              top: 10,
-              left: 10,
-              zIndex: 1000,
-              padding: '8px 16px',
-              backgroundColor: '#e94560',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
+            className={styles.backButton}
           >
             ← Leave
           </button>
 
-          {/* Room ID display */}
-          <div style={{
-            position: 'absolute',
-            top: 10,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-            padding: '8px 16px',
-            backgroundColor: '#16213e',
-            color: '#4ecca3',
-            borderRadius: 6,
-            fontFamily: 'monospace',
-            fontSize: 18,
-          }}>
+          <div className={styles.roomTag}>
             Room: {roomId}
           </div>
 
-          <PhaserGame ref={phaserRef}/>
+          <PhaserGame/>
         </div>
       )}
     </div>

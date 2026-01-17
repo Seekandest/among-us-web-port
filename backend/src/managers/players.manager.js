@@ -57,6 +57,8 @@ export const PlayersManager = {
     setRoomId(id, roomId) {
         if (players[id]) {
             players[id].roomId = roomId;
+            return players[id];
         }
+
     },
 }

@@ -28,15 +28,22 @@ export const registerRoomEvents = (io, socket) => {
         console.log("Room join received:", data);
         let player = PlayersManager.getPlayer(data.playerId);
         if (player) {
-            // TODO setup return values to reduce method calls
-            PlayersManager.setRoomId(player.id, data.roomId)
-            RoomsManager.players.add(data.roomId, player);
-            player = PlayersManager.getPlayer(data.playerId);
+            player = RoomsManager.players.add(data.roomId, player);
             console.log("Player after setting roomId and adding to room:", player, data.roomId);
             const room = RoomsManager.fetchRoom(data.roomId);
             socket.join(data.roomId)
             socket.emit("room:joined", {roomId: data.roomId, room, player});
             socket.to(data.roomId).emit("player:joined", {player, roomId: data.roomId});
+        }
+    }
+    const roomLeave = (data) => {
+        console.log("Room leave received:", data);
+        const player = PlayersManager.getPlayer(data.playerId);
+        if (player) {
+            const roomId = player.roomId;
+            RoomsManager.players.remove(roomId, player);
+            io.to(roomId).emit("player:left", {playerId: player.id});
+            PlayersManager.setRoomId(player.id, null);
         }
     }
     const disconnect = (data) => {
@@ -52,6 +59,6 @@ export const registerRoomEvents = (io, socket) => {
     socket.on("player:register", playerRegister);
     socket.on("room:create", roomCreate);
     socket.on("room:join", roomJoin);
-    // TODO add room:leave event
+    socket.on("room:leave", roomLeave);
     socket.on("disconnect", disconnect)
 }
