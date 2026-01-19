@@ -23,7 +23,7 @@ export const registerGameEvents = (io, socket) => {
         // data: {playerId: string, roomId: string, state: {x: number, y: number, d: string}}
         // Update player state in PlayersManager
         console.log("Player move received:", data);
-        socket.to(data.roomId).emit("player:moved", data);
+        io.to(data.roomId).emit("player:moved", data);
     }
 
     const animationShift = (data) => {

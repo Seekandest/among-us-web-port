@@ -16,10 +16,14 @@ export const registerRoomEvents = (io, socket) => {
     const roomCreate = (data) => {
         console.log("Room create received:", data);
         const player = PlayersManager.getPlayer(data.hostId);
-        if (player) {
-            RoomsManager.createRoom(data.roomId, player);
+        if (!player) {
+            console.error("Player not found for room creation:", data.hostId);
+            return;
         }
-        socket.emit("room:created", {roomId: data.roomId});
+        const room = RoomsManager.createRoom(data.roomId, player);
+        io.emit("room:created", {roomId: data.roomId, room: room});
+        // Auto join the host to the room
+        roomJoin({playerId: data.hostId, roomId: data.roomId});
     }
     /**
      * @param {{playerId : string, roomId: string}} data
@@ -41,24 +45,36 @@ export const registerRoomEvents = (io, socket) => {
         const player = PlayersManager.getPlayer(data.playerId);
         if (player) {
             const roomId = player.roomId;
-            RoomsManager.players.remove(roomId, player);
+            const {deleted} = RoomsManager.players.remove(roomId, player);
             io.to(roomId).emit("player:left", {playerId: player.id});
             PlayersManager.setRoomId(player.id, null);
+            socket.leave(roomId);
+            if (deleted) {
+                io.emit("room:deleted", {roomId});
+            }
         }
+    }
+    const sendMessage = (data) => {
+        console.log("Send message received:", data);
+        io.to(data.roomId).emit("room:message", {playerId: data.playerId, message: data.message});
     }
     const disconnect = (data) => {
         console.log("Player disconnected:", data);
         const player = PlayersManager.getPlayer(data.playerId);
         if (player) {
             const roomId = player.roomId;
-            RoomsManager.players.remove(roomId, player);
+            const {deleted} = RoomsManager.players.remove(roomId, player);
             socket.to(roomId).emit("player:left", {playerId: player.id});
             PlayersManager.deletePlayer(player.id);
+            if (deleted) {
+                io.emit("room:deleted", {roomId});
+            }
         }
     }
     socket.on("player:register", playerRegister);
     socket.on("room:create", roomCreate);
     socket.on("room:join", roomJoin);
     socket.on("room:leave", roomLeave);
-    socket.on("disconnect", disconnect)
+    socket.on("room:send:message", sendMessage);
+    socket.on("disconnect", disconnect);
 }

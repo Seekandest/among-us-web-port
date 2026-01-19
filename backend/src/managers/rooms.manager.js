@@ -20,16 +20,18 @@ export const RoomsManager = {
             /**
              * @param {string} roomId
              * @param {import('../types/room.type.js').Player} player
+             * @returns {{deleted: boolean}} - returns true if room was deleted due to no players
              */
             remove(roomId, player) {
-                if (!rooms[roomId]) return;
+                if (!rooms[roomId]) return {deleted: false};
                 delete rooms[roomId].players[player.id];
                 const remainingPlayers = Object.values(rooms[roomId].players);
                 if (remainingPlayers.length < 1) {
                     delete rooms[roomId];
-                    return;
+                    return {deleted: true};
                 }
                 if (rooms[roomId].host.id === player.id) {rooms[roomId].host = remainingPlayers[0];}
+                return {deleted: false};
             },
             /**
              * @param {string} roomId
@@ -50,6 +52,7 @@ export const RoomsManager = {
         if (rooms[roomId]) return
 
         rooms[roomId] = {id: roomId, started: false, imposter: null, host: host, players: {}};
+        return rooms[roomId];
     },
 
     fetchRooms() {

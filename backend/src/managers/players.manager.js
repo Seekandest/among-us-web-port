@@ -8,8 +8,8 @@ export const PlayersManager = {
     /**
      * @param {string} id
      * @param {string} name
-     * @param {string|null} roomId
      * @param {string} color
+     * @param {string|null} roomId
      */
     createPlayer(id, name, color, roomId= null) {
         const key = id;
@@ -18,11 +18,15 @@ export const PlayersManager = {
                 id: key,
                 name: name,
                 roomId: roomId,
-                state: {x: 0, y: 0, d: 'left', moving: false},
+                state: {x: 560, y: 150, d: 'left', moving: false},
                 color: color,
                 isImposter: false,
                 isAlive: true,
             };
+        } else {
+            // Update existing player's name and color
+            players[key].name = name;
+            players[key].color = color;
         }
     },
 
