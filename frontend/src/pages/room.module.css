@@ -7,11 +7,168 @@
   cursor: pointer;
 }
 
-.joinLobbyBtn {
-  background-color: #4CAF50;
-  color: white;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+.container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1a1a2e;
+  font-family: Arial, sans-serif;
 }
+
+.card {
+  background-color: #16213e;
+  border-radius: 16px;
+  padding: 40px;
+  min-width: 350px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.title {
+  color: #fff;
+  font-size: 36px;
+  margin: 0 0 24px 0;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.subtitle {
+  color: #e0e0e0;
+  font-size: 18px;
+  margin: 0 0 16px 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.welcome {
+  color: #4ecca3;
+  font-size: 18px;
+  margin: 0 0 16px 0;
+}
+
+.input {
+  padding: 12px 16px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 2px solid #4ecca3;
+  background-color: #0f3460;
+  color: #fff;
+  outline: none;
+  text-align: center;
+}
+
+.button {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 8px;
+  border: none;
+  background-color: #4ecca3;
+  color: #1a1a2e;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.buttonPrimary {
+  padding: 16px 24px;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 8px;
+  border: none;
+  background-color: #e94560;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  color: #666;
+}
+
+.error {
+  color: #e94560;
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.roomList {
+  list-style-type: none;
+  padding: 0;
+}
+
+.roomId {
+  color: #4ecca3;
+  font-weight: bold;
+}
+
+.highlight {
+  color: #f39c12;
+}
+
+.noRooms {
+  color: #aaa;
+}
+
+.colorPickerSection {
+  margin: 16px 0;
+  padding: 16px;
+  background-color: #0f3460;
+  border-radius: 8px;
+}
+
+.colorLabel {
+  color: #e0e0e0;
+  font-size: 14px;
+  margin: 0 0 12px 0;
+}
+
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.colorOption {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.colorOption:hover {
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.colorOptionSelected {
+  transform: scale(1.15);
+  border-color: #4ecca3 !important;
+  box-shadow: 0 0 12px rgba(78, 204, 163, 0.6);
+}
+
+.clearColorButton {
+  padding: 8px 16px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  background-color: #e94560;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.clearColorButton:hover {
+  background-color: #c7354f;
+}
+
