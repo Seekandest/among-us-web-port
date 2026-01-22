@@ -1,11 +1,12 @@
 import React, {useState, useEffect, useRef} from 'react';
 import socketService from '../services/socket';
 import styles from './room.module.css';
+import {Button} from '../components/Button.jsx';
 
 /**
  * @param {{onJoinGame: (roomId: string) => void}} props
  */
-export function Lobby({onJoinGame}) {
+export function Menu({onJoinGame}) {
   const [playerName, setPlayerName] = useState('');
   const [selectedColor, setSelectedColor] = useState(null);
   const [isRegistered, setIsRegistered] = useState(false);
@@ -39,7 +40,7 @@ export function Lobby({onJoinGame}) {
 
     const onRoomJoined = (data) => {
       console.log('Joined room:', data);
-      onJoinGame(data.roomId);
+      onJoinGame({roomId: data.roomId, playerId: getPlayerId()});
     };
 
     const onPlayerRegistered = () => {
@@ -48,10 +49,17 @@ export function Lobby({onJoinGame}) {
       setIsRegistered(true);
     };
 
+    const onPlayerUnregistered = () => {
+      console.log('Player unregistered');
+      isRegisteredRef.current = false;
+      setIsRegistered(false);
+    };
+
     socket.on('room:created', onRoomCreated);
     socket.on('room:deleted', onRoomDeleted);
     socket.on('room:joined', onRoomJoined);
     socket.on('player:registered', onPlayerRegistered);
+    socket.on('player:unregistered', onPlayerUnregistered);
 
     fetch('http://localhost:3001/rooms')
       .then(response => response.json())
@@ -63,6 +71,7 @@ export function Lobby({onJoinGame}) {
       socket.off('room:deleted', onRoomDeleted);
       socket.off('room:joined', onRoomJoined);
       socket.off('player:registered', onPlayerRegistered);
+      socket.off('player:unregistered', onPlayerUnregistered);
     };
 
   }, [socket, onJoinGame]);
@@ -91,7 +100,10 @@ export function Lobby({onJoinGame}) {
 
     setError('');
   };
-
+  const handleBackToRegister = () => {
+    const playerId = getPlayerId();
+    socket.emit('player:unregister', {playerId});
+  }
   const handleCreateRoom = () => {
     if (!isRegisteredRef.current) {
       setError('Please register first');
@@ -124,9 +136,9 @@ export function Lobby({onJoinGame}) {
   };
 
   return (<div className={styles.container}>
+    {isRegistered && (<Button onClick={handleBackToRegister} children="Back" className={styles.backBtn}/>)}
     <div className={styles.card}>
       <h1 className={styles.title}>Among Us</h1>
-
       {!isRegistered ? (<div className={styles.section}>
         <h2 className={styles.subtitle}>Enter Your Name</h2>
         <input
@@ -161,9 +173,7 @@ export function Lobby({onJoinGame}) {
           )}
         </div>
 
-        <button onClick={handleRegister} className={styles.button}>
-          Continue
-        </button>
+        <Button onClick={handleRegister} children="Continue"/>
       </div>) : (<div className={styles.section}>
         <p className={styles.welcome}>Welcome, {playerName}!</p>
         <div>
@@ -178,9 +188,7 @@ export function Lobby({onJoinGame}) {
             </ul>
           </div>) : (<p className={styles.noRooms}>No available rooms. Create one!</p>)}
         </div>
-        <button onClick={handleCreateRoom} className={styles.buttonPrimary}>
-          Create Room
-        </button>
+        <Button onClick={handleCreateRoom} children="Create Room"/>
       </div>)}
 
       {error && <p className={styles.error}>{error}</p>}
@@ -241,4 +249,4 @@ function getAvailableColors() {
   return PLAYER_COLORS;
 }
 
-export default Lobby;
+export default Menu;

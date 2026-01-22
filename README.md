@@ -8,9 +8,14 @@
 - improved game state storage
 - ~~add colors select system~~
 - ~~room refresh system~~
-- add chat system
 - improve home UI
 - add tasks system
 - add kill system
 - add impostor selection system
 - add victory conditions
+- add emergency meeting system
+- add voting system
+- add chat system
+- repeated player calls
+![img.png](img.png)
+- Add validations for sockets

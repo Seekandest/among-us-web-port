@@ -79,6 +79,7 @@ export const RoomsManager = {
         }
         const idx = Math.floor(Math.random() * players.length);
         rooms[roomId].imposter = players[idx].id;
-
+        return rooms[roomId];
+        // TODO filter imposter before sending room
     }
 }

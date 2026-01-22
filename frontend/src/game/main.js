@@ -4,8 +4,8 @@ import Phaser from 'phaser';
 window.Phaser = Phaser;
 
 import ColorReplacePipelinePlugin from 'phaser3-rex-plugins/plugins/colorreplacepipeline-plugin.js';
-import {Game} from './scenes/Game';
-
+import { WaitingLobby } from './scenes/Lobby.js';
+import { Game } from './scenes/Game';
 // Find out more information about the Game Config at:
 // https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config = {
@@ -13,15 +13,20 @@ const config = {
     width: 1024,
     height: 768,
     parent: 'game-container',
-    backgroundColor: '#028af8',
+    backgroundColor: '#000000',
     physics: {
         default: 'arcade',
         arcade: {
             gravity: { y: 0 },
-            debug: false
+            debug: true
         }
     },
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.NO_CENTER
+    },
     scene: [
+        WaitingLobby,
         Game
     ],
     plugins: {

@@ -27,8 +27,6 @@ export const registerGameEvents = (io, socket) => {
     }
 
     const animationShift = (data) => {
-        console.log("Animation shift received:", data, socket.rooms);
-
         io.to(data.roomId).emit("player:animation", data);
     }
 
@@ -36,7 +34,5 @@ export const registerGameEvents = (io, socket) => {
     socket.on("player:leave", playerLeave);
     socket.on("player:move", playerMove);
     socket.on("player:animation", animationShift);
-    // socket.on("game:start", gameStart);
-    // socket.on("game:end", gameEnd);
 
 }

@@ -1,0 +1,321 @@
+import { Scene } from 'phaser';
+import { socketService } from '../../services/socket.js';
+import { EventBus } from '../EventBus';
+import { createPlayer } from '../utils/playerFactory.js';
+
+/**
+ * Base class for shared logic of player management, movement, and socket events
+ */
+export class BaseGameScene extends Scene {
+    constructor(key) {
+        super(key);
+    }
+
+    init(data) {
+        this.config = data;
+        this.roomId = data?.roomId || null;
+    }
+
+    /**
+     * Override in child classes, will provide scene specific map configuration
+     * @returns {{ mapKey: string, mapJSON: string, tilesetName: string, tilesetKey: string, backgroundKey: string, backgroundImage: string }}
+     */
+    getMapConfig() {
+        throw new Error('getMapConfig() must be implemented by child class');
+    }
+
+    /**
+     * Common assets
+     */
+    preloadCommon() {
+        this.load.atlas(
+            'player',
+            'assets/walk/texture.png',
+            'assets/walk/texture.json'
+        );
+        this.load.image('idleImage', 'assets/sprites/Base/idle.png');
+    }
+
+    /**
+     * Load map specific assets based on getMapConfig()
+     */
+    preloadMap() {
+        const config = this.getMapConfig();
+        // TODO make it more dynamic to handle multiple tilesets
+        this.load.image(config.tilesetKey, `assets/map/${config.tilesetKey}.png`);
+        this.load.image(config.backgroundKey, `assets/map/${config.backgroundImage}`);
+        this.load.tilemapTiledJSON(config.mapKey, `assets/map/${config.mapJSON}`);
+    }
+
+    createWalkAnimation() {
+        if (this.anims.exists('walk')) return;
+
+        this.anims.create({
+            key: 'walk',
+            frames: [
+                { key: 'player', frame: 'Walk0001.png' },
+                { key: 'player', frame: 'Walk0002.png' },
+                { key: 'player', frame: 'Walk0003.png' },
+                { key: 'player', frame: 'Walk0004.png' },
+                { key: 'player', frame: 'Walk0005.png' },
+                { key: 'player', frame: 'Walk0006.png' },
+                { key: 'player', frame: 'Walk0007.png' },
+                { key: 'player', frame: 'Walk0008.png' },
+                { key: 'player', frame: 'Walk0009.png' },
+                { key: 'player', frame: 'Walk0010.png' },
+                { key: 'player', frame: 'Walk0011.png' },
+                { key: 'player', frame: 'Walk0012.png' }
+            ],
+            frameRate: 12,
+            repeat: -1
+        });
+    }
+
+    /**
+     * Setup tilemap and collision layer
+     */
+    setupMap() {
+        const config = this.getMapConfig();
+
+        const map = this.make.tilemap({ key: config.mapKey });
+        const tileset = map.addTilesetImage(config.tilesetName, config.tilesetKey);
+
+        const collisionLayer = map.createLayer('collisions', tileset, 0, 0);
+        this.add.image(0, 0, config.backgroundKey).setOrigin(0, 0);
+
+        if (collisionLayer) {
+            collisionLayer.setCollisionByExclusion([-1, 0]);
+            this.collisionLayer = collisionLayer;
+
+            if (this.physics.config.debug) {
+                collisionLayer.setVisible(true);
+                collisionLayer.setAlpha(0.5);
+                const debugGraphics = this.add.graphics().setAlpha(0.7);
+                collisionLayer.renderDebug(debugGraphics, {
+                    tileColor: null,
+                    collidingTileColor: new Phaser.Display.Color(255, 0, 0, 128),
+                    faceColor: new Phaser.Display.Color(0, 255, 0, 255)
+                });
+            }
+        }
+
+        return { map, tileset, collisionLayer };
+    }
+
+    /**
+     * Setup keyboard inputs for movement
+     */
+    setupInput() {
+        // TODO review input handling
+        this.wKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+        this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+        this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
+        this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    }
+
+    /**
+     * Add a player sprite to the scene
+     * @param {{ id: string, x: number, y: number, color: string }} playerData
+     */
+    addPlayer(playerData) {
+        const newPlayer = createPlayer(this, playerData, {
+            addCollision: true,
+            collisionLayer: this.collisionLayer
+        });
+        this.players[playerData.id] = newPlayer;
+        return newPlayer;
+    }
+
+    /**
+     * Remove a player sprite from the scene
+     * @param {string} playerId
+     */
+    removePlayer(playerId) {
+        if (!this.players[playerId]) return;
+        if (this.sys && this.sys.displayList) {
+            this.players[playerId].destroy();
+        }
+        delete this.players[playerId];
+        console.log("Players Modified", this.players);
+    }
+
+    /**
+     * Fetch room data and setup players
+     */
+    fetchAndSetupPlayers() {
+        const playerId = localStorage.getItem("playerId");
+        const socket = socketService.getSocket();
+
+        console.log("Fetching room data for playerId:", playerId, "socket id:", socket?.id);
+
+        fetch(`http://localhost:3001/player/room/${playerId}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("room joined event received");
+                console.log("room joined data:", data);
+
+                if (!this.sys || !this.sys.displayList) return;
+
+                this.room = data.room;
+                this.player = this.addPlayer({
+                    id: data.player.id,
+                    x: data.player.state.x,
+                    y: data.player.state.y,
+                    color: data.player.color
+                });
+                this.playerObj = data.player;
+                console.log("Created own player sprite:", this.player, this.players);
+
+                this.cameras.main.setZoom(2);
+                this.cameras.main.startFollow(this.player, true);
+
+                // Add existing players in the room
+                Object.values(this.room.players).forEach((player) => {
+                    if (player.id === this.playerObj.id) return;
+                    console.log("Adding existing player:", player);
+                    this.addPlayer({
+                        id: player.id,
+                        x: player.state.x,
+                        y: player.state.y,
+                        color: player.color
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching room data:', error);
+            });
+    }
+
+    /**
+     * Setup socket event listeners for player events
+     */
+    setupSocketListeners() {
+        const socket = socketService.getSocket();
+        if (!socket) return;
+
+        this.socket = socket;
+
+        socket.on('player:joined', (data) => {
+            console.log("player joined", data);
+            if (!this.sys || !this.sys.displayList) return;
+            this.addPlayer({
+                id: data.player.id,
+                x: data.player.state.x,
+                y: data.player.state.y,
+                color: data.player.color
+            });
+        });
+
+        socket.on('player:left', (data) => {
+            console.log("player left", data);
+            this.removePlayer(data.playerId);
+        });
+
+        socket.on('player:moved', (data) => {
+            const player = this.players[data.id];
+            if (!player) return;
+
+            if (data.id !== this.playerObj?.id) {
+                player.x = data.x;
+                player.y = data.y;
+            }
+
+            if (data.d) player.flipX = data.d === 'left';
+
+            if (!player.anims) return;
+            if (data.moving) {
+                if (!player.anims.isPlaying) player.anims.play('walk');
+            } else {
+                player.anims.stop();
+                player.setTexture('idleImage');
+            }
+        });
+    }
+
+    /**
+     * Common create logic for all game scenes
+     */
+    createCommon() {
+        this.players = {};
+        this.createWalkAnimation();
+        this.setupMap();
+        this.setupInput();
+        this.setupSocketListeners();
+        this.fetchAndSetupPlayers();
+        EventBus.emit('current-scene-ready', this);
+    }
+
+    /**
+     * Handle player movement (call in update)
+     */
+    handleMovement() {
+        if (!this.player || !this.player.body) return;
+
+        // Reset velocity each frame
+        this.player.body.setVelocity(0, 0);
+
+        const speed = 150;
+        let vx = 0;
+        let vy = 0;
+
+        if (this.wKey.isDown) { vy = -speed; }
+        if (this.sKey.isDown) { vy = speed; }
+        if (this.aKey.isDown) { vx = -speed; this.playerObj.state.d = 'left'; }
+        if (this.dKey.isDown) { vx = speed; this.playerObj.state.d = 'right'; }
+
+        // Normalize diagonal movement
+        if (vx !== 0 && vy !== 0) {
+            vx *= 0.707;
+            vy *= 0.707;
+        }
+
+        // Local Player Movement
+        this.player.body.setVelocity(vx, vy);
+        if (vx < 0) this.player.flipX = true;
+        else if (vx > 0) this.player.flipX = false;
+
+        const isMoving = vx !== 0 || vy !== 0;
+        if (isMoving) {
+            if (!this.player.anims.isPlaying) {
+                this.player.anims.play('walk');
+            }
+        } else {
+            if (this.player.anims.isPlaying) {
+                this.player.anims.stop();
+                this.player.setTexture('idleImage');
+            }
+        }
+
+        // Send movement to server (ensures collision corrected position is sent)
+        if (isMoving || this.wasMoving) {
+            this.time.delayedCall(0, () => {
+                if (!this.player || !this.socket) return;
+                this.socket.emit('player:move', {
+                    id: this.playerObj.id,
+                    x: this.player.x,
+                    y: this.player.y,
+                    roomId: this.room.id,
+                    d: this.playerObj.state.d,
+                    moving: isMoving
+                });
+            });
+        }
+        this.wasMoving = isMoving;
+    }
+
+    /**
+     * Cleanup socket listeners
+     */
+    cleanupSocketListeners() {
+        if (this.socket) {
+            this.socket.off('player:joined');
+            this.socket.off('player:left');
+            this.socket.off('player:moved');
+        }
+    }
+
+    shutdown() {
+        this.cleanupSocketListeners();
+    }
+}
+

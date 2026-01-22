@@ -7,7 +7,7 @@ import { registerGameEvents } from "./events/gameEvents.js";
 
 const io = new Server({
     cors: {
-        origin: "http://localhost:8080",
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });

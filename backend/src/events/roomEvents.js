@@ -10,6 +10,11 @@ export const registerRoomEvents = (io, socket) => {
         PlayersManager.createPlayer(data.id, data.name, data.color);
         socket.emit('player:registered', {playerId: data.id});
     }
+    const playerUnregister = (data) => {
+        console.log("Player unregister received:", data);
+        PlayersManager.deletePlayer(data.playerId);
+        socket.emit('player:unregistered');
+    }
     /**
      * @param {{hostId : string, roomId}} data
      */
@@ -22,7 +27,6 @@ export const registerRoomEvents = (io, socket) => {
         }
         const room = RoomsManager.createRoom(data.roomId, player);
         io.emit("room:created", {roomId: data.roomId, room: room});
-        // Auto join the host to the room
         roomJoin({playerId: data.hostId, roomId: data.roomId});
     }
     /**
@@ -54,6 +58,16 @@ export const registerRoomEvents = (io, socket) => {
             }
         }
     }
+    const gameStart = (data) => {
+        console.log("Game start received:", data);
+        const room = RoomsManager.startGame(data.roomId);
+        if (!room) {
+            console.error("Room not found or could not start game:", data.roomId);
+            return;1
+        }
+        io.to(data.roomId).emit("game:started", data );
+
+    }
     const sendMessage = (data) => {
         console.log("Send message received:", data);
         io.to(data.roomId).emit("room:message", {playerId: data.playerId, message: data.message});
@@ -71,10 +85,16 @@ export const registerRoomEvents = (io, socket) => {
             }
         }
     }
+    socket.on("log", (data) => {
+        console.log(data)
+    });
     socket.on("player:register", playerRegister);
+    socket.on("player:unregister", playerUnregister);
     socket.on("room:create", roomCreate);
     socket.on("room:join", roomJoin);
     socket.on("room:leave", roomLeave);
+    socket.on("game:start", gameStart);
     socket.on("room:send:message", sendMessage);
     socket.on("disconnect", disconnect);
+    // TODO cleanup old imposter sending logic
 }

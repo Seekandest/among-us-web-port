@@ -22,5 +22,25 @@ router.get("/player/room/:playerId", (req, res) => {
     console.log("Fetched room for player:", playerId, room, player);
     res.json({room, player});
 });
-
+router.get("/isImposter/", (req, res) => {
+    const playerId = req.query.playerId;
+    const roomId = req.query.roomId;
+    const room = RoomsManager.fetchRoom(roomId);
+    if (!room) {
+        console.log("Room not found for isImposter check:", roomId);
+        res.status(404).json({error: "Room not found"});
+        return;
+    }
+    if (!room.imposter) {
+        console.error("No imposter assigned in room:", roomId);
+        res.status(400).json({error: "No imposter assigned in room"});
+        return;
+    }
+    console.log("Checking if player is imposter:", playerId, room.imposter, room.imposter && room.imposter === playerId);
+    if (room.imposter && room.imposter === playerId) {
+        res.json({isImposter: true});
+    } else {
+        res.json({isImposter: false});
+    }
+});
 export default router;
