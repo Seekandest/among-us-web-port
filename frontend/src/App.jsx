@@ -16,6 +16,7 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [socket, setSocket] = useState(null);
   const playerIdRef = useRef(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     socketService.connect();
@@ -55,6 +56,7 @@ function App() {
     setRoomId(joinedRoomId);
     roomIdRef.current = joinedRoomId;
     setCurrentPage(PAGES.WAITING);
+    // check event bus start-game
     // TODO instead check if room is started and then decide value
   };
   const handleStartGame = () => {
@@ -70,7 +72,7 @@ function App() {
 
   return (
     <div id="app">
-
+      {error && <p className={styles.error}>{error}</p>}
       <div className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
         {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
 

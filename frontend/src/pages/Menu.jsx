@@ -3,6 +3,8 @@ import socketService from '../services/socket';
 import styles from './room.module.css';
 import {Button} from '../components/Button.jsx';
 
+const URL = import.meta.env.VITE_HOST;
+
 /**
  * @param {{onJoinGame: (roomId: string) => void}} props
  */
@@ -55,13 +57,18 @@ export function Menu({onJoinGame}) {
       setIsRegistered(false);
     };
 
+    const handleCantJoin = (data) => {
+      setError(data.message || 'Cannot join room');
+    };
+
     socket.on('room:created', onRoomCreated);
     socket.on('room:deleted', onRoomDeleted);
     socket.on('room:joined', onRoomJoined);
     socket.on('player:registered', onPlayerRegistered);
     socket.on('player:unregistered', onPlayerUnregistered);
+    socket.on('room:join:error', handleCantJoin);
 
-    fetch('http://localhost:3001/rooms')
+    fetch(`http://${URL}:3001/rooms`)
       .then(response => response.json())
       .then(data => {setRooms(data)})
       .catch(error => console.error('Error fetching rooms:', error));
@@ -72,6 +79,7 @@ export function Menu({onJoinGame}) {
       socket.off('room:joined', onRoomJoined);
       socket.off('player:registered', onPlayerRegistered);
       socket.off('player:unregistered', onPlayerUnregistered);
+      socket.off('room:join:error', handleCantJoin);
     };
 
   }, [socket, onJoinGame]);
@@ -118,7 +126,7 @@ export function Menu({onJoinGame}) {
   };
 
   const handleFetchRooms = () => {
-    fetch('http://localhost:3001/rooms')
+    fetch(`http://${URL}:3001/rooms`)
       .then(response => response.json())
       .then(data => {setRooms(data)})
       .catch(error => console.error('Error fetching rooms:', error));

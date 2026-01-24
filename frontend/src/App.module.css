@@ -75,3 +75,38 @@
   background: black;
   bottom: 10px;
 }
+
+.error {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  background-color: #f44336;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  font-weight: 600;
+  z-index: 2000;
+  transition: transform 220ms ease, opacity 220ms ease;
+  opacity: 0;
+  pointer-events: none;
+}
+.error.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.error .message {
+  display: inline-block;
+  vertical-align: middle;
+}
+.error .close {
+  margin-left: 10px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.95);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}

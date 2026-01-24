@@ -3,6 +3,7 @@ import { socketService } from '../../services/socket.js';
 import { EventBus } from '../EventBus';
 import { createPlayer } from '../utils/playerFactory.js';
 
+const URL = import.meta.env.VITE_HOST;
 /**
  * Base class for shared logic of player management, movement, and socket events
  */
@@ -142,48 +143,44 @@ export class BaseGameScene extends Scene {
     /**
      * Fetch room data and setup players
      */
-    fetchAndSetupPlayers() {
+    async fetchAndSetupPlayers() {
         const playerId = localStorage.getItem("playerId");
         const socket = socketService.getSocket();
 
         console.log("Fetching room data for playerId:", playerId, "socket id:", socket?.id);
 
-        fetch(`http://localhost:3001/player/room/${playerId}`)
-            .then(response => response.json())
-            .then(data => {
-                console.log("room joined event received");
-                console.log("room joined data:", data);
+        const response = await fetch(`http://${URL}:3001/player/room/${playerId}`);
+        const data = await response.json()
 
-                if (!this.sys || !this.sys.displayList) return;
+        console.log("room joined event received");
+        console.log("room joined data:", data);
 
-                this.room = data.room;
-                this.player = this.addPlayer({
-                    id: data.player.id,
-                    x: data.player.state.x,
-                    y: data.player.state.y,
-                    color: data.player.color
-                });
-                this.playerObj = data.player;
-                console.log("Created own player sprite:", this.player, this.players);
+        if (!this.sys || !this.sys.displayList) return;
 
-                this.cameras.main.setZoom(2);
-                this.cameras.main.startFollow(this.player, true);
+        this.room = data.room;
+        this.player = this.addPlayer({
+            id: data.player.id,
+            x: data.player.state.x,
+            y: data.player.state.y,
+            color: data.player.color
+        });
+        this.playerObj = data.player;
+        console.log("Created own player sprite:", this.player, this.players);
 
-                // Add existing players in the room
-                Object.values(this.room.players).forEach((player) => {
-                    if (player.id === this.playerObj.id) return;
-                    console.log("Adding existing player:", player);
-                    this.addPlayer({
-                        id: player.id,
-                        x: player.state.x,
-                        y: player.state.y,
-                        color: player.color
-                    });
-                });
-            })
-            .catch(error => {
-                console.error('Error fetching room data:', error);
+        this.cameras.main.setZoom(2);
+        this.cameras.main.startFollow(this.player, true);
+
+        // Add existing players in the room
+        Object.values(this.room.players).forEach((player) => {
+            if (player.id === this.playerObj.id) return;
+            console.log("Adding existing player:", player);
+            this.addPlayer({
+                id: player.id,
+                x: player.state.x,
+                y: player.state.y,
+                color: player.color
             });
+        });
     }
 
     /**
@@ -235,13 +232,15 @@ export class BaseGameScene extends Scene {
     /**
      * Common create logic for all game scenes
      */
-    createCommon() {
+    async createCommon() {
         this.players = {};
+        this.ui = this.add.container(0, 0).setScrollFactor(0).setDepth(1000);
         this.createWalkAnimation();
         this.setupMap();
         this.setupInput();
         this.setupSocketListeners();
-        this.fetchAndSetupPlayers();
+        await this.fetchAndSetupPlayers();
+        console.log("Finished Setting Up Players: ", this.player);
         EventBus.emit('current-scene-ready', this);
     }
 

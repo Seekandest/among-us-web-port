@@ -35,12 +35,18 @@ export const registerRoomEvents = (io, socket) => {
     const roomJoin = (data) => {
         console.log("Room join received:", data);
         let player = PlayersManager.getPlayer(data.playerId);
+        const room = RoomsManager.fetchRoom(data.roomId);
+        if (!room || room.started) {
+            socket.emit("room:join:error", {message: "Room not found or game already started"});
+            console.error("Room not found or game already started:", data.roomId);
+            return;
+        }
         if (player) {
             player = RoomsManager.players.add(data.roomId, player);
             console.log("Player after setting roomId and adding to room:", player, data.roomId);
-            const room = RoomsManager.fetchRoom(data.roomId);
             socket.join(data.roomId)
-            socket.emit("room:joined", {roomId: data.roomId, room, player});
+            // TODO remove sending whole room object with imposter
+            socket.emit("room:joined", {roomId: data.roomId, room, player, started: room.started});
             socket.to(data.roomId).emit("player:joined", {player, roomId: data.roomId});
         }
     }
@@ -63,7 +69,7 @@ export const registerRoomEvents = (io, socket) => {
         const room = RoomsManager.startGame(data.roomId);
         if (!room) {
             console.error("Room not found or could not start game:", data.roomId);
-            return;1
+            return;
         }
         io.to(data.roomId).emit("game:started", data );
 

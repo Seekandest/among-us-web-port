@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
-
-const SOCKET_URL = "http://192.168.1.12:3000";
+console.log(import.meta.env.BASE_URL)
+const URL = import.meta.env.VITE_HOST;
+const SOCKET_URL = `http://${URL}:3000`;
 
 // Create socket connection
 const socket = io(SOCKET_URL, {

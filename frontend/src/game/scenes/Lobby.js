@@ -2,6 +2,7 @@ import {BaseGameScene} from './BaseGameScene.js';
 import {socketService} from '../../services/socket.js';
 import {EventBus} from '../EventBus.js';
 
+const URL = import.meta.env.VITE_HOST;
 /**
  * Waiting lobby scene - extends BaseGameScene with lobby-specific map and rules
  */
@@ -11,16 +12,18 @@ export class WaitingLobby extends BaseGameScene {
         // No idea how this fixed it
         this.handleStartGame = this.handleStartGame.bind(this);
     }
-
+    init(data) {
+        console.log("Lobby Scene started with ", data)
+    }
     /**
      * Handle start game event from React
      */
     handleStartGame(data) {
-        console.log('handleStartGame called with data:', data);
+        console.log('handleStartGame called with data:', data, this.scene);
         if (this.scene && this.scene.isActive('WaitingLobby')) {
             console.log('Starting game with data:', data);
             // TODO fetch only when sure that imposter is set
-            data.isImposter = fetch(`http://localhost:3001/isImposter/?roomId=${data.roomId}&playerId=${data.playerId}`)
+            data.isImposter = fetch(`http://${URL}:3001/isImposter/?roomId=${data.roomId}&playerId=${data.playerId}`)
                 .then(res => res.json())
                 .then(json => json.isImposter)
                 .catch(err => {
