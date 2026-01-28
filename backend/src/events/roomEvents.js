@@ -13,6 +13,7 @@ export const registerRoomEvents = (io, socket) => {
     const playerUnregister = (data) => {
         console.log("Player unregister received:", data);
         PlayersManager.deletePlayer(data.playerId);
+        // TODO REMOVE FROM THE ROOM TOO AND SEND WIN CONDITION CHECK
         socket.emit('player:unregistered');
     }
     /**
@@ -43,7 +44,7 @@ export const registerRoomEvents = (io, socket) => {
         }
         if (player) {
             player = RoomsManager.players.add(data.roomId, player);
-            console.log("Player after setting roomId and adding to room:", player, data.roomId);
+            // console.log("Player after setting roomId and adding to room:", player, data.roomId);
             socket.join(data.roomId)
             // TODO remove sending whole room object with imposter
             socket.emit("room:joined", {roomId: data.roomId, room, player, started: room.started});
@@ -56,6 +57,11 @@ export const registerRoomEvents = (io, socket) => {
         if (player) {
             const roomId = player.roomId;
             const {deleted} = RoomsManager.players.remove(roomId, player);
+            const win = RoomsManager.checkWin(roomId);
+            console.log("Win condition check after player leave:", win);
+            if (!(win === null)) {
+                io.to(roomId).emit("game:ended", {roomId, isImposter: win});
+            }
             io.to(roomId).emit("player:left", {playerId: player.id});
             PlayersManager.setRoomId(player.id, null);
             socket.leave(roomId);
@@ -71,8 +77,7 @@ export const registerRoomEvents = (io, socket) => {
             console.error("Room not found or could not start game:", data.roomId);
             return;
         }
-        io.to(data.roomId).emit("game:started", data );
-
+        io.to(data.roomId).emit("game:started", data);
     }
     const sendMessage = (data) => {
         console.log("Send message received:", data);

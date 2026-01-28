@@ -15,6 +15,14 @@
  *   isAlive: boolean
  * }} Player
  */
+/**
+ * @typedef {{
+ *   isActive: boolean,
+ *   callerId: string,
+ *   votes: {[playerId: string]: string}, // playerId -> votedForId
+ *   endTime: number
+ * }} MeetingState
+ */
 
 /**
  * @typedef {{
@@ -22,7 +30,8 @@
  *   started: boolean,
  *   imposter: (string|null),
  *   host: Player,
- *   players: {[key: string]: Player}
+ *   players: {[key: string]: Player},
+ *   currentMeeting: MeetingState | null
  * }} GameRoom
  */
 

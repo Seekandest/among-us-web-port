@@ -3,7 +3,7 @@ import {PlayersManager} from "./players.manager.js";
 /**
  * @type {{[key: string]: import('../types/room.type.js').GameRoom}}
  */
-const rooms = {"1" : {id: "1", started: false, imposter: null, host: {id: "host1", name: "Host One", roomId: "1", state: {x: 0, y: 0, d: 'left'}, color: "red", isImposter: false, isAlive: true}, players: {}}};
+const rooms = {"1" : {id: "1", started: false, imposter: null, host: {id: "host1", name: "Host One", roomId: "1", state: {x: 0, y: 0, d: 'left'}, color: "red", isImposter: false, isAlive: true}, players: {}, currentMeeting: null}};
 
 export const RoomsManager = {
     players : {
@@ -43,7 +43,56 @@ export const RoomsManager = {
                 rooms[roomId].players[playerId].state = state;
             },
     },
+    meetings: {
+        create(roomId, callerId, endFunc) {
+          rooms[roomId].currentMeeting = {isActive: true, callerId, votes: {}, endTime: Date.now() + 10000};
+          this.endTimeout = setTimeout(() => {endFunc({ roomId })}, 1000*10);
+        },
+        vote(roomId, callerId, votedForId) {
+            rooms[roomId].currentMeeting.votes[callerId] = votedForId;
+            const allVoted = rooms[roomId].currentMeeting.votes.length === Object.values(rooms[roomId].players).filter(p => p.isAlive).length;
+            return { allVoted }
+        },
+        end(roomId) {
+            if (!rooms[roomId] || !rooms[roomId].currentMeeting) return null;
+            const meeting = rooms[roomId].currentMeeting;
+            if (!meeting.isActive) return null;
 
+            if (this.endTimeout) {
+                clearTimeout(this.endTimeout);
+                this.endTimeout = null;
+            }
+
+            meeting.isActive = false;
+            const votes = meeting.votes || {};
+
+            const counts = {};
+            let max = 0;
+            let winners = [];
+            Object.values(votes).forEach(votedForId => {
+                if (votedForId == null) return;
+                counts[votedForId] = (counts[votedForId] || 0) + 1;
+                if (counts[votedForId] > max) {
+                    max = counts[votedForId];
+                    winners.splice(0, winners.length, votedForId);
+                } else if (counts[votedForId] === max) {
+                    winners.push(votedForId);
+                }
+            });
+
+            let ejectedId = null;
+            const tie = winners.length !== 1;
+            if (!tie && winners.length === 1) {
+                ejectedId = winners[0];
+                if (rooms[roomId].players && rooms[roomId].players[ejectedId]) {
+                    rooms[roomId].players[ejectedId].isAlive = false;
+                }
+            }
+
+            meeting.results = { ejectedId, tie, counts, votes };
+            return meeting.results;
+        },
+    },
     /**
      * @param {string} roomId
      * @param {import('../types/room.type.js').Player} host
@@ -51,12 +100,12 @@ export const RoomsManager = {
     createRoom(roomId, host) {
         if (rooms[roomId]) return
 
-        rooms[roomId] = {id: roomId, started: false, imposter: null, host: host, players: {}};
+        rooms[roomId] = {id: roomId, started: false, imposter: null, host: host, players: {}, currentMeeting: null};
         return rooms[roomId];
     },
 
     fetchRooms() {
-        console.log("Fetching rooms:", rooms);
+        // console.log("Fetching rooms:", rooms);
         return Object.values(rooms);
     },
     /**
@@ -77,9 +126,48 @@ export const RoomsManager = {
             rooms[roomId].imposter = null;
             return;
         }
+
+        // Reset alive status for all players when starting
+        players.forEach(p => p.isAlive = true);
+
         const idx = Math.floor(Math.random() * players.length);
         rooms[roomId].imposter = players[idx].id;
         return rooms[roomId];
         // TODO filter imposter before sending room
+    },
+    checkWin(roomId) {
+        const room = rooms[roomId];
+        console.log("Checking win for room:", roomId, room);
+        if (!room || !room.started) {
+            console.log("Room Not Started or not found:", roomId);
+            return null;
+        }
+
+        const players = Object.values(room.players);
+        const imposterId = room.imposter;
+        if (!imposterId) {
+            console.log("No imposter assigned in room:", roomId);
+            return null;
+        }
+
+        const alivePlayers = players.filter(p => p.isAlive);
+        const aliveImposters = alivePlayers.filter(p => p.id === imposterId);
+        const aliveCrewmates = alivePlayers.filter(p => p.id !== imposterId);
+
+        console.log(`Alive Imposters: ${aliveImposters.length}, Alive Crewmates: ${aliveCrewmates.length}`);
+
+        if (aliveImposters.length >= aliveCrewmates.length && aliveCrewmates.length > 0) {
+            return true;
+        }
+
+        if (aliveCrewmates.length === 0) {
+            return true;
+        }
+
+        if (aliveImposters.length === 0) {
+            return false;
+        }
+
+        return null;
     }
 }

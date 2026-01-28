@@ -37,3 +37,88 @@ const ColorSwapPipeline = new Phaser.Class({
     }
 });
 export {ColorSwapPipeline};
+
+const grayFragShader = `
+precision mediump float;
+uniform sampler2D uMainSampler;
+varying vec2 outTexCoord;
+
+void main() {
+    vec4 color = texture2D(uMainSampler, outTexCoord);
+    // standard luminance formula
+    float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+    gl_FragColor = vec4(vec3(gray), color.a);
+}
+`;
+
+// 2. Register the Pipeline
+const GrayPipeline = new Phaser.Class({
+    Extends: Phaser.Renderer.WebGL.Pipelines.SinglePipeline,
+    initialize: function (game) {
+        Phaser.Renderer.WebGL.Pipelines.SinglePipeline.call(this, {
+            game: game,
+            fragShader: grayFragShader
+        });
+    }
+});
+
+export { GrayPipeline };
+
+// Vision Radius Shader - Creates fog of war effect
+const visionRadiusFragShader = `
+#define SHADER_NAME VISION_RADIUS_FS
+
+precision mediump float;
+
+uniform sampler2D uMainSampler;
+uniform vec2 uPlayerPosition;      // Player position in world coordinates
+uniform float uVisionRadius;       // Vision radius in world units
+uniform vec2 uTextureOrigin;       // Texture's world position (x, y)
+uniform vec2 uTextureSize;         // Texture's size in world units (width, height)
+
+varying vec2 outTexCoord;
+
+void main() {
+    vec4 color = texture2D(uMainSampler, outTexCoord);
+
+    // Convert texture UV coordinate (0-1) to world coordinates
+    vec2 worldPos = uTextureOrigin + (outTexCoord * uTextureSize);
+
+    // Calculate distance from player in world space
+    float dist = distance(worldPos, uPlayerPosition);
+
+    // Vision radius with smooth falloff
+    float falloffStart = uVisionRadius * 0.6;  // Inner radius (full brightness)
+    float falloffEnd = uVisionRadius;          // Outer radius (full darkness)
+
+    // Calculate visibility factor (1.0 = visible, 0.0 = hidden)
+    float visibility = 1.0 - smoothstep(falloffStart, falloffEnd, dist);
+
+    // Convert to grayscale outside vision
+    float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 grayColor = vec3(gray) * 0.3; // Darken the grayscale
+
+    // Mix between colored and dark grayscale based on visibility
+    vec3 finalColor = mix(grayColor, color.rgb, visibility);
+
+    gl_FragColor = vec4(finalColor, color.a);
+}
+`;
+
+const VisionRadiusPipeline = new Phaser.Class({
+    Extends: Phaser.Renderer.WebGL.Pipelines.SinglePipeline,
+    initialize: function (game) {
+        Phaser.Renderer.WebGL.Pipelines.SinglePipeline.call(this, {
+            game: game,
+            fragShader: visionRadiusFragShader,
+            uniforms: [
+                'uPlayerPosition',
+                'uVisionRadius',
+                'uTextureOrigin',
+                'uTextureSize'
+            ]
+        });
+    }
+});
+
+export { VisionRadiusPipeline };

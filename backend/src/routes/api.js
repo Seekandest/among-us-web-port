@@ -15,11 +15,11 @@ router.get("/player/room/:playerId", (req, res) => {
     }
     const room = RoomsManager.fetchRoom(player.roomId);
     if (!room) {
-        console.log("Room not found for player:", playerId, player);
+        // console.log("Room not found for player:", playerId, player);
         res.status(404).json({error: "Room not found"});
         return;
     }
-    console.log("Fetched room for player:", playerId, room, player);
+    // console.log("Fetched room for player:", playerId, room, player);
     res.json({room, player});
 });
 router.get("/isImposter/", (req, res) => {

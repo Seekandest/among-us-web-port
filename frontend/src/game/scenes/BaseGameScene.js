@@ -82,7 +82,7 @@ export class BaseGameScene extends Scene {
         const tileset = map.addTilesetImage(config.tilesetName, config.tilesetKey);
 
         const collisionLayer = map.createLayer('collisions', tileset, 0, 0);
-        this.add.image(0, 0, config.backgroundKey).setOrigin(0, 0);
+        this.background = this.add.image(0, 0, config.backgroundKey).setOrigin(0, 0).setName('background');
 
         if (collisionLayer) {
             collisionLayer.setCollisionByExclusion([-1, 0]);
@@ -112,6 +112,7 @@ export class BaseGameScene extends Scene {
         this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
         this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
         this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+        this.mKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
     }
 
     /**
@@ -123,7 +124,15 @@ export class BaseGameScene extends Scene {
             addCollision: true,
             collisionLayer: this.collisionLayer
         });
+        newPlayer.id = playerData.id;
+        newPlayer.alive = true;
         this.players[playerData.id] = newPlayer;
+
+        // Save spawn position
+        if (!this.spawnPositions[playerData.id]) {
+            this.spawnPositions[playerData.id] = { x: playerData.x, y: playerData.y };
+        }
+
         return newPlayer;
     }
 
@@ -190,9 +199,16 @@ export class BaseGameScene extends Scene {
         const socket = socketService.getSocket();
         if (!socket) return;
 
+        // Prevent registering the same handlers multiple times
+        if (this._socketListenersAdded) {
+            this.socket = socket;
+            return;
+        }
+
         this.socket = socket;
 
-        socket.on('player:joined', (data) => {
+        // named handlers so they can be removed later
+        this._onPlayerJoined = (data) => {
             console.log("player joined", data);
             if (!this.sys || !this.sys.displayList) return;
             this.addPlayer({
@@ -201,16 +217,16 @@ export class BaseGameScene extends Scene {
                 y: data.player.state.y,
                 color: data.player.color
             });
-        });
+        };
 
-        socket.on('player:left', (data) => {
+        this._onPlayerLeft = (data) => {
             console.log("player left", data);
             this.removePlayer(data.playerId);
-        });
+        };
 
-        socket.on('player:moved', (data) => {
+        this._onPlayerMoved = (data) => {
             const player = this.players[data.id];
-            if (!player) return;
+            if (!player || !player.alive) return;
 
             if (data.id !== this.playerObj?.id) {
                 player.x = data.x;
@@ -226,7 +242,31 @@ export class BaseGameScene extends Scene {
                 player.anims.stop();
                 player.setTexture('idleImage');
             }
-        });
+        };
+
+        socket.on('player:joined', this._onPlayerJoined);
+        socket.on('player:left', this._onPlayerLeft);
+        socket.on('player:moved', this._onPlayerMoved);
+
+        this._socketListenersAdded = true;
+    }
+
+    /**
+     * Cleanup socket listeners
+     */
+    cleanupSocketListeners() {
+        if (this.socket && this._socketListenersAdded) {
+            // Remove only the handlers we added
+            if (this._onPlayerJoined) this.socket.off('player:joined', this._onPlayerJoined);
+            if (this._onPlayerLeft) this.socket.off('player:left', this._onPlayerLeft);
+            if (this._onPlayerMoved) this.socket.off('player:moved', this._onPlayerMoved);
+
+            // clear refs
+            this._onPlayerJoined = null;
+            this._onPlayerLeft = null;
+            this._onPlayerMoved = null;
+            this._socketListenersAdded = false;
+        }
     }
 
     /**
@@ -235,6 +275,8 @@ export class BaseGameScene extends Scene {
     async createCommon() {
         this.players = {};
         this.ui = this.add.container(0, 0).setScrollFactor(0).setDepth(1000);
+        this.spawnPositions = {}; // Track spawn positions for each player
+        this.meetingActive = false; // Track if meeting is active
         this.createWalkAnimation();
         this.setupMap();
         this.setupInput();
@@ -249,6 +291,16 @@ export class BaseGameScene extends Scene {
      */
     handleMovement() {
         if (!this.player || !this.player.body) return;
+
+        // Disable movement during meeting
+        if (this.meetingActive) {
+            this.player.body.setVelocity(0, 0);
+            if (this.player.anims.isPlaying) {
+                this.player.anims.stop();
+                this.player.setTexture('idleImage');
+            }
+            return;
+        }
 
         // Reset velocity each frame
         this.player.body.setVelocity(0, 0);
@@ -269,9 +321,12 @@ export class BaseGameScene extends Scene {
         }
 
         // Local Player Movement
-        this.player.body.setVelocity(vx, vy);
-        if (vx < 0) this.player.flipX = true;
-        else if (vx > 0) this.player.flipX = false;
+        if (this.player.alive) {
+            this.player.body.setVelocity(vx, vy);
+            if (vx < 0) this.player.flipX = true;
+            else if (vx > 0) this.player.flipX = false;
+        }
+
 
         const isMoving = vx !== 0 || vy !== 0;
         if (isMoving) {
@@ -285,7 +340,7 @@ export class BaseGameScene extends Scene {
             }
         }
 
-        // Send movement to server (ensures collision corrected position is sent)
+        // Send movement to server
         if (isMoving || this.wasMoving) {
             this.time.delayedCall(0, () => {
                 if (!this.player || !this.socket) return;
@@ -302,19 +357,8 @@ export class BaseGameScene extends Scene {
         this.wasMoving = isMoving;
     }
 
-    /**
-     * Cleanup socket listeners
-     */
-    cleanupSocketListeners() {
-        if (this.socket) {
-            this.socket.off('player:joined');
-            this.socket.off('player:left');
-            this.socket.off('player:moved');
-        }
-    }
 
     shutdown() {
         this.cleanupSocketListeners();
     }
 }
-
