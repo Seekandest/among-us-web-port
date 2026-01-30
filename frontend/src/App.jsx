@@ -7,6 +7,7 @@ import Button from "./components/Button.jsx";
 import Meeting from "./components/Meeting.jsx";
 import EndGame from "./components/EndGame.jsx";
 import {EventBus} from './game/EventBus';
+import RoleIndicator from "./components/RoleIndicator.jsx";
 
 const PAGES = {MENU: 'lobby', WAITING: 'waiting', GAME: 'game', GAMEEND: 'gameend'};
 
@@ -23,9 +24,10 @@ function App() {
   const [meetingActive, setMeetingActive] = useState(false);
   const [meetingData, setMeetingData] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(60000);
-
   const [gameResult, setGameResult] = useState(null);
   const [isLocalPlayerImposter, setIsLocalPlayerImposter] = useState(false);
+  const LocalImposterRef = useRef(false); // TODO remove unwanted states with ref
+  const [roleIndicator, setRoleIndicator] = useState(false);
 
   useEffect(() => {
     socketService.connect();
@@ -41,11 +43,14 @@ function App() {
     const handleStartGame = (data) => {
       console.log('Game started event received in App:', data, roomIdRef.current, data.roomId === roomId);
       if (data.roomId === roomIdRef.current) {
-        console.log('Starting game for room:', roomId);
         data.playerId = playerIdRef.current;
         setIsLocalPlayerImposter(data.isImposter);
         EventBus.emit('start-game', data);
         setCurrentPage(PAGES.GAME);
+        data.isImposter.then((val) => {
+          LocalImposterRef.current = val;
+          setRoleIndicator(true);
+        });
       }
     }
 
@@ -69,9 +74,15 @@ function App() {
       setCurrentPage(PAGES.GAMEEND);
     };
 
+    const handleVote = (data) => {
+      console.log('Vote event received in App:', data, meetingData);
+      setMeetingData(prev => ({...prev, players: {...prev.players, [data.callerId]: {...prev.players[data.callerId], voted: true}}}));
+    };
+
     sockett.on('connect', handleConnect);
     sockett.on('disconnect', handleDisconnect);
     sockett.on('game:started', handleStartGame);
+    sockett.on('meeting:voted', handleVote);
 
     EventBus.on('meeting:started', handleMeetingStarted);
     EventBus.on('meeting:ended', handleMeetingEnded);
@@ -81,6 +92,7 @@ function App() {
       sockett.off('connect', handleConnect);
       sockett.off('disconnect', handleDisconnect);
       sockett.off('game:started', handleStartGame);
+      sockett.off('meeting:voted', handleVote);
       EventBus.off('meeting:started', handleMeetingStarted);
       EventBus.off('meeting:ended', handleMeetingEnded);
       EventBus.off('game:ended', handleGameEnd);
@@ -99,11 +111,12 @@ function App() {
   const handleStartGameBtn = () => {
     socket.emit('game:start', { roomId });
   }
-  const handleBackToRoom = () => {
+  const handleBackToMenu = () => {
     const playerId = localStorage.getItem('playerId');
     if (socket && playerId) socket.emit('room:leave', {playerId});
     setRoomId(null);
     setCurrentPage(PAGES.MENU);
+    window.location.reload();
   };
 
   // Timer countdown for meeting
@@ -123,15 +136,10 @@ function App() {
     return () => clearInterval(interval);
   }, [meetingActive]);
 
-  const handleVote = (votedForId) => {
-    if (!socket || !roomId) return;
-    console.log('Voting for:', votedForId);
-    socket.emit('meeting:vote', {
-      roomId: roomId,
-      callerId: playerIdRef.current,
-      votedForId: votedForId
-    });
-  };
+  const handleVoteCallBack = (data) => {
+    data.roomId = roomId;
+    socket.emit('meeting:vote', data);
+  }
 
   const handleEndMeeting = () => {
     if (!socket || !roomId) return;
@@ -145,9 +153,12 @@ function App() {
     <div id="app">
       {error && <p className={styles.error}>{error}</p>}
       <div className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
-        {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-
+        {isConnected ? 'Connected' : 'Disconnected'}
       </div>
+      {roleIndicator && <RoleIndicator
+        role={{imposter: LocalImposterRef.current}}
+        onAnimationEnd={() => {setRoleIndicator(false)}}
+      />}
 
       {currentPage === PAGES.MENU && (
         <Menu onJoinGame={handleJoinRoom}/>
@@ -156,7 +167,7 @@ function App() {
       {currentPage === PAGES.GAMEEND && (
         <EndGame
           result={gameResult}
-          onBackToMenu={handleBackToRoom}
+          onBackToMenu={handleBackToMenu}
           isLocalPlayerImposter={isLocalPlayerImposter}
         />
       )}
@@ -165,17 +176,16 @@ function App() {
         <div className={styles.gameContainer}>
           <PhaserGame/>
           {currentPage === PAGES.WAITING && <Button onClick={handleStartGameBtn} children="Start Game" className={styles.startBtn}/>}
-          <button className={styles.backButton} onClick={handleBackToRoom}>Leave</button>
+          <button className={styles.backButton} onClick={handleBackToMenu}>Leave</button>
           <div className={styles.roomTag}>
             Room: {roomId}
           </div>
 
-          {/* Meeting UI overlay */}
           {meetingActive && meetingData && (
             <Meeting
               players={meetingData.players}
               currentPlayerId={playerIdRef.current}
-              onVote={handleVote}
+              onVote={handleVoteCallBack}
               onEndMeeting={handleEndMeeting}
               timeRemaining={timeRemaining}
             />

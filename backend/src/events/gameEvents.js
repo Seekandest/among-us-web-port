@@ -42,6 +42,7 @@ export const registerGameEvents = (io, socket) => {
         console.log("Recieved meeting end", data);
         data.results = RoomsManager.meetings.end(data.roomId);
         io.to(data.roomId).emit("meeting:ended", data);
+        // Check win condition after meeting
         const roomId = data.roomId;
         const win = RoomsManager.checkWin(roomId);
         console.log("Win condition check after meeting:", win);
@@ -52,10 +53,13 @@ export const registerGameEvents = (io, socket) => {
     const meetingVote = (data) => {
         console.log("Recieved meeting vote", data);
         const allVoted = RoomsManager.meetings.vote(data.roomId, data.callerId, data.votedForId);
+        io.to(data.roomId).emit("meeting:voted", data);
+
         if (allVoted) {
+            console.log('All players voted, ending meeting early');
             meetingEnd({roomId: data.roomId});
         }
-        io.to(data.roomId).emit("meeting:vote", data);
+
     };
 
     // socket.on("player:join", playerJoin); looks useless for now as room:join already does the job

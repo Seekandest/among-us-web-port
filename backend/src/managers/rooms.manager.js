@@ -46,12 +46,17 @@ export const RoomsManager = {
     meetings: {
         create(roomId, callerId, endFunc) {
           rooms[roomId].currentMeeting = {isActive: true, callerId, votes: {}, endTime: Date.now() + 10000};
-          this.endTimeout = setTimeout(() => {endFunc({ roomId })}, 1000*10);
+          this.endTimeout = setTimeout(() => {endFunc({ roomId })}, 1000*60);
+          // console.log("Meeting created in room:", roomId, rooms[roomId].currentMeeting, rooms[roomId]); // DEBUG LOG
         },
         vote(roomId, callerId, votedForId) {
+            console.log("Vote received in room:", rooms[roomId], "from callerId:", callerId, "votedForId:", votedForId); // DEBUG LOG
+            if (!rooms[roomId] || !rooms[roomId].currentMeeting) return null;
             rooms[roomId].currentMeeting.votes[callerId] = votedForId;
-            const allVoted = rooms[roomId].currentMeeting.votes.length === Object.values(rooms[roomId].players).filter(p => p.isAlive).length;
-            return { allVoted }
+            const alivePlayers = Object.values(rooms[roomId].players).filter(p => p.isAlive);
+            const votes = Object.values(rooms[roomId].currentMeeting.votes);
+            console.log("Alive players for voting check:", alivePlayers, alivePlayers.length, votes.length); // DEBUG LOG
+            return votes.length === alivePlayers.length;
         },
         end(roomId) {
             if (!rooms[roomId] || !rooms[roomId].currentMeeting) return null;

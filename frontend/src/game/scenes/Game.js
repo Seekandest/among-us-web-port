@@ -191,7 +191,7 @@ export class Game extends BaseGameScene {
             this.meetingActive = true;
             this.physics.pause(); // Pause physics
             disableVisionSystem(this);
-
+            console.log("Meeting started, players teleported to spawn.", data, this.room.players);
             // Recieved by react
             EventBus.emit('meeting:started', {
                 roomId: this.room.id,
