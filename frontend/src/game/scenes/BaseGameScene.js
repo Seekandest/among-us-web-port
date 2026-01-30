@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { socketService } from '../../services/socket.js';
+import { apiUrl } from '../../utils/urls.js';
 import { EventBus } from '../EventBus';
 import { createPlayer } from '../utils/playerFactory.js';
 
@@ -158,8 +159,8 @@ export class BaseGameScene extends Scene {
 
         console.log("Fetching room data for playerId:", playerId, "socket id:", socket?.id);
 
-        const response = await fetch(`http://${URL}:3001/player/room/${playerId}`);
-        const data = await response.json()
+        const response = await fetch(apiUrl(`/player/room/${playerId}`));
+        const data = await response.json();
 
         console.log("room joined event received");
         console.log("room joined data:", data);

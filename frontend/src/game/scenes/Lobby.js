@@ -1,5 +1,6 @@
 import {BaseGameScene} from './BaseGameScene.js';
 import {socketService} from '../../services/socket.js';
+import { apiUrl } from '../../utils/urls.js';
 import {EventBus} from '../EventBus.js';
 
 const URL = import.meta.env.VITE_HOST;
@@ -23,7 +24,7 @@ export class WaitingLobby extends BaseGameScene {
         if (this.scene && this.scene.isActive('WaitingLobby')) {
             console.log('Starting game with data:', data);
             // TODO fetch only when sure that imposter is set
-            data.isImposter = fetch(`http://${URL}:3001/isImposter/?roomId=${data.roomId}&playerId=${data.playerId}`)
+            data.isImposter = fetch(apiUrl(`/isImposter/?roomId=${data.roomId}&playerId=${data.playerId}`))
                 .then(res => res.json())
                 .then(json => json.isImposter)
                 .catch(err => {

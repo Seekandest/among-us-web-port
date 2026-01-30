@@ -1,11 +1,13 @@
 import { io } from "socket.io-client";
-console.log(import.meta.env.BASE_URL)
-const URL = import.meta.env.VITE_HOST;
-const SOCKET_URL = `http://${URL}:3000`;
+import { getSocketUrl } from '../utils/urls.js';
+
+// Build socket URL from env helpers. This allows deployment configuration via VITE_SOCKET_URL or VITE_HOST.
+const SOCKET_URL = getSocketUrl();
 
 // Create socket connection
 const socket = io(SOCKET_URL, {
     autoConnect: false,
+    withCredentials: true
 });
 
 // Connection event handlers
@@ -43,4 +45,3 @@ export const socketService = {
 };
 
 export default socketService;
-
