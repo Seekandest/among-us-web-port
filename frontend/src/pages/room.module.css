@@ -19,18 +19,13 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
-/* Main container with background */
 .container {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* public files are served at root -> /assets/... */
-  /* Background image served from public/assets - keep the reference but comment out
-     the url resolver line to avoid the static analyzer error in this environment.
-     In the browser runtime Vite will serve /assets/background.jpg correctly. */
-  /* background-image: url("/assets/background.jpg?url"); */
+  background-image: url("/assets/background.jpg");
   background-size: cover;
   background-position: center;
   font-family: 'Segoe UI', Arial, sans-serif;
