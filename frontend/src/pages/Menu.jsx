@@ -1,9 +1,8 @@
 import React, {useState, useEffect, useRef} from 'react';
 import socketService from '../services/socket';
 import styles from './room.module.css';
+import { apiUrl } from '../utils/urls.js';
 import {Button} from '../components/Button.jsx';
-
-const URL = import.meta.env.VITE_HOST;
 
 /**
  * @param {{onJoinGame: (roomId: string) => void}} props
@@ -68,7 +67,7 @@ export function Menu({onJoinGame}) {
     socket.on('player:unregistered', onPlayerUnregistered);
     socket.on('room:join:error', handleCantJoin);
 
-    fetch(`http://${URL}:3001/rooms`)
+    fetch(apiUrl('/rooms'))
       .then(response => response.json())
       .then(data => {setRooms(data)})
       .catch(error => console.error('Error fetching rooms:', error));
@@ -126,7 +125,7 @@ export function Menu({onJoinGame}) {
   };
 
   const handleFetchRooms = () => {
-    fetch(`http://${URL}:3001/rooms`)
+    fetch(apiUrl('/rooms'))
       .then(response => response.json())
       .then(data => {setRooms(data)})
       .catch(error => console.error('Error fetching rooms:', error));
