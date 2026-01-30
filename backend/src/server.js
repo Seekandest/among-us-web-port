@@ -4,12 +4,22 @@ import apiRouter from "./routes/api.js";
 import cors from "cors";
 import { registerRoomEvents } from "./events/roomEvents.js";
 import { registerGameEvents } from "./events/gameEvents.js";
-import 'dotenv/config'
-const URL = process.env.HOST
+import 'dotenv/config';
 
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || process.env.FRONTEND_URL || URL || '*';
+const PORT = process.env.PORT || 3000;
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || process.env.FRONTEND_URL || '*';
 
-const io = new Server({
+const app = express();
+
+app.use(cors({ origin: ALLOWED_ORIGIN, credentials: true }));
+app.use('/', apiRouter);
+
+// HTTP server
+import http from "http";
+const server = http.createServer(app);
+
+// Socket.IO server
+const io = new Server(server, {
     cors: {
         origin: ALLOWED_ORIGIN,
         methods: ["GET", "POST"],
@@ -23,11 +33,6 @@ io.on("connection", (socket) => {
     registerGameEvents(io, socket);
 });
 
-io.listen(3000);
-console.log("Socket.io server running on port 3000");
-
-const app = express();
-
-app.use(cors({ origin: ALLOWED_ORIGIN, credentials: true }));
-app.use('/', apiRouter);
-app.listen(3001, () => {console.log("Express server running on port 3001");});
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
