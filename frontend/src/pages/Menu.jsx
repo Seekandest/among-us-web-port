@@ -41,7 +41,8 @@ export function Menu({onJoinGame}) {
 
     const onRoomJoined = (data) => {
       console.log('Joined room:', data);
-      onJoinGame({roomId: data.roomId, playerId: getPlayerId()});
+      const playerId = getPlayerId()
+      onJoinGame({roomId: data.roomId, playerId, isHost: data.room.host.id === playerId});
     };
 
     const onPlayerRegistered = () => {
@@ -221,10 +222,10 @@ function generateUserId() {
   return result;
 }
 const getPlayerId = () => {
-  const playerId = localStorage.getItem('playerId');
+  const playerId = sessionStorage.getItem('playerId');
   if (!playerId) {
     const id = generateUserId();
-    localStorage.setItem('playerId', id);
+    sessionStorage.setItem('playerId', id);
     return id;
   }
   return playerId;

@@ -59,6 +59,12 @@ export class Game extends BaseGameScene {
         // stored promise for imposter role assignment
         const prom1 = this.createCommon();
         this.socket = socketService.getSocket();
+        this.input.on('pointerdown', (pointer) => {
+            console.log(
+                'screen:', pointer.x, pointer.y,
+                'world:', pointer.worldX, pointer.worldY
+            );
+        });
 
         this.game.renderer.pipelines.add('GrayScale', new GrayPipeline(this.game));
         this.game.renderer.pipelines.add('VisionRadius', new VisionRadiusPipeline(this.game));

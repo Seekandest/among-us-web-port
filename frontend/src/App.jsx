@@ -26,6 +26,7 @@ function App() {
   const [timeRemaining, setTimeRemaining] = useState(60000);
   const [gameResult, setGameResult] = useState(null);
   const [isLocalPlayerImposter, setIsLocalPlayerImposter] = useState(false);
+  const [isLocalPlayerHost, setIsLocalPlayerHost] = useState(false);
   const LocalImposterRef = useRef(false); // TODO remove unwanted states with ref
   const [roleIndicator, setRoleIndicator] = useState(false);
 
@@ -107,12 +108,13 @@ function App() {
     setRoomId(joinedRoomId);
     roomIdRef.current = joinedRoomId;
     setCurrentPage(PAGES.WAITING);
+    setIsLocalPlayerHost(data.isHost);
   };
   const handleStartGameBtn = () => {
     socket.emit('game:start', { roomId });
   }
   const handleBackToMenu = () => {
-    const playerId = localStorage.getItem('playerId');
+    const playerId = sessionStorage.getItem('playerId');
     if (socket && playerId) socket.emit('room:leave', {playerId});
     setRoomId(null);
     setCurrentPage(PAGES.MENU);
@@ -175,7 +177,7 @@ function App() {
       {(currentPage === PAGES.GAME || currentPage === PAGES.WAITING) && (
         <div className={styles.gameContainer}>
           <PhaserGame/>
-          {currentPage === PAGES.WAITING && <Button onClick={handleStartGameBtn} children="Start Game" className={styles.startBtn}/>}
+          {currentPage === PAGES.WAITING && isLocalPlayerHost && <Button onClick={handleStartGameBtn} children="Start Game" className={styles.startBtn}/>}
           <button className={styles.backButton} onClick={handleBackToMenu}>Leave</button>
           <div className={styles.roomTag}>
             Room: {roomId}

@@ -154,7 +154,7 @@ export class BaseGameScene extends Scene {
      * Fetch room data and setup players
      */
     async fetchAndSetupPlayers() {
-        const playerId = localStorage.getItem("playerId");
+        const playerId = sessionStorage.getItem("playerId");
         const socket = socketService.getSocket();
 
         console.log("Fetching room data for playerId:", playerId, "socket id:", socket?.id);

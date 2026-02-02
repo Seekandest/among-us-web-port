@@ -7,7 +7,7 @@ const voteIcon = '/assets/meeting/voted.png';
 const ivotedIcon = '/assets/meeting/ivoted.png';
 const cancelIcon = '/assets/meeting/cancel.png';
 const confirmIcon = '/assets/meeting/confirm.png';
-const localPlayerId = localStorage.getItem('playerId');
+const localPlayerId = sessionStorage.getItem('playerId');
 // player: {id, name, voted, color}
 export default function MeetingTile({player, votes, VoteCallBack}) {
   const [selected, setSelected] = useState(false);
