@@ -44,7 +44,7 @@ export class WaitingLobby extends BaseGameScene {
             tilesetName: 'red',
             tilesetKey: 'red',
             backgroundKey: 'lobby',
-            backgroundImage: 'skled.png'
+            backgroundImage: 'Lobby.png'
         };
     }
     preload() {

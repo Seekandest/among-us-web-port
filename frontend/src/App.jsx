@@ -104,6 +104,7 @@ function App() {
   const handleJoinRoom = (data) => {
     const joinedRoomId = data.roomId;
     playerIdRef.current = data.playerId;
+
     console.log('Joining room with ID:', joinedRoomId);
     setRoomId(joinedRoomId);
     roomIdRef.current = joinedRoomId;
@@ -177,7 +178,7 @@ function App() {
       {(currentPage === PAGES.GAME || currentPage === PAGES.WAITING) && (
         <div className={styles.gameContainer}>
           <PhaserGame/>
-          {currentPage === PAGES.WAITING && isLocalPlayerHost && <Button onClick={handleStartGameBtn} children="Start Game" className={styles.startBtn}/>}
+          {currentPage === PAGES.WAITING && isLocalPlayerHost ? <Button onClick={handleStartGameBtn} children="Start Game" className={styles.startBtn}/> : <Button children="Wating for Host to Start" className={styles.startBtn}/>}
           <button className={styles.backButton} onClick={handleBackToMenu}>Leave</button>
           <div className={styles.roomTag}>
             Room: {roomId}

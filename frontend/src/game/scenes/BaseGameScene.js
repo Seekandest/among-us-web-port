@@ -4,7 +4,7 @@ import { apiUrl } from '../../utils/urls.js';
 import { EventBus } from '../EventBus';
 import { createPlayer } from '../utils/playerFactory.js';
 
-const URL = import.meta.env.VITE_HOST;
+const RL = import.meta.env.VITE_HOST;
 /**
  * Base class for shared logic of player management, movement, and socket events
  */
@@ -83,9 +83,17 @@ export class BaseGameScene extends Scene {
         const tileset = map.addTilesetImage(config.tilesetName, config.tilesetKey);
 
         const collisionLayer = map.createLayer('collisions', tileset, 0, 0);
+
         this.background = this.add.image(0, 0, config.backgroundKey).setOrigin(0, 0).setName('background');
 
         if (collisionLayer) {
+            if (this.scene.key === 'WaitingLobby') {
+                const scaleX = 1232 / (map.widthInPixels);
+                const scaleY = 1008 / (map.heightInPixels);
+                collisionLayer.setScale(scaleX, scaleY);
+                collisionLayer.setVisible(false);
+            }
+
             collisionLayer.setCollisionByExclusion([-1, 0]);
             this.collisionLayer = collisionLayer;
 
@@ -127,6 +135,12 @@ export class BaseGameScene extends Scene {
         });
         newPlayer.id = playerData.id;
         newPlayer.alive = true;
+
+        // Scale up sprites for lobby scene to match smaller map size
+        if (this.scene.key === 'WaitingLobby') {
+            newPlayer.setScale(0.3);
+        }
+
         this.players[playerData.id] = newPlayer;
 
         // Save spawn position
@@ -177,7 +191,9 @@ export class BaseGameScene extends Scene {
         this.playerObj = data.player;
         console.log("Created own player sprite:", this.player, this.players);
 
-        this.cameras.main.setZoom(2);
+        // Set camera zoom based on scene type
+        const zoom = this.scene.key === 'WaitingLobby' ? 1 : 3;
+        this.cameras.main.setZoom(zoom);
         this.cameras.main.startFollow(this.player, true);
 
         // Add existing players in the room
@@ -306,7 +322,7 @@ export class BaseGameScene extends Scene {
         // Reset velocity each frame
         this.player.body.setVelocity(0, 0);
 
-        const speed = 150;
+        const speed = this.scene.key === 'WaitingLobby' ? 350 : 100;
         let vx = 0;
         let vy = 0;
 

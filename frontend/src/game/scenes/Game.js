@@ -71,7 +71,7 @@ export class Game extends BaseGameScene {
 
         this.closest = { player: null, distance: 60 };
 
-        this.VISION_RADIUS = 150;
+        this.VISION_RADIUS = 100;
         this.visionEnabled = true;
         this.mapObjects = [];
 

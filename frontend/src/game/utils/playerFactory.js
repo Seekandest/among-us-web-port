@@ -27,7 +27,7 @@ export function createPlayer(scene, playerData, options = {}) {
         scene.physics.add.collider(player, collisionLayer);
     }
 
-    player.setScale(0.125, 0.125);
+    player.setScale(0.1, 0.1);
     player.body.setSize(player.width * 0.4, player.height * 0.6);
     player.body.setOffset(player.width * 0.3, player.height * 0.2);
 

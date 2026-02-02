@@ -42,6 +42,14 @@ export function Menu({onJoinGame}) {
     const onRoomJoined = (data) => {
       console.log('Joined room:', data);
       const playerId = getPlayerId()
+      // let color;
+      // color = getRandomColor();
+      // const available_colors = Object.values(data.room.players).map(p => p.color);
+      // if (!selectedColor) {
+      //   while (!available_colors.includes(color)) {
+      //     color = getRandomColor();
+      //   }
+      // }
       onJoinGame({roomId: data.roomId, playerId, isHost: data.room.host.id === playerId});
     };
 
@@ -136,11 +144,33 @@ export function Menu({onJoinGame}) {
       setError('Please register first');
       return;
     }
-    console.log('Joining room:', roomId)
-    const playerId = getPlayerId();
-    socket.emit('room:join', {
-      playerId: playerId, roomId: roomId,
-    });
+    console.log('Joining room:', roomId);
+    let data;
+    fetch(apiUrl(`/rooms/${roomId}`))
+      .then(response => response.json())
+      .then(data => {
+        console.log(data);
+        if (data) {
+          const taken_colors = Object.values(data.players).map(p => p.color);
+          const taken_names = Object.values(data.players).map(p => p.name);
+          if (taken_names.includes(playerName)) {
+            setError('Name already taken in this room');
+            return;
+          }
+          if (selectedColor && taken_colors.includes(selectedColor)) {
+            setError('Color already taken in this room');
+            return;
+          }
+        }
+        const playerId = getPlayerId();
+        socket.emit('room:join', {
+          playerId: playerId, roomId: roomId,
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching room data:', error);
+        return null;
+      });
   };
 
   return (<div className={styles.container}>
@@ -229,8 +259,7 @@ const getPlayerId = () => {
     return id;
   }
   return playerId;
-}
-
+};
 /**
  * Available Among Us colors
  */

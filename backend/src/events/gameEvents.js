@@ -1,4 +1,5 @@
 import {RoomsManager} from "../managers/rooms.manager.js";
+import {PlayersManager} from "../managers/players.manager.js";
 
 export const registerGameEvents = (io, socket) => {
     // see comment below about playerJoin
@@ -12,7 +13,8 @@ export const registerGameEvents = (io, socket) => {
 
     // ====== PLAYER EVENTS ======
     const playerMove = (data) => {
-        // console.log("Player move received:", data);
+        RoomsManager.players.updateState(data.roomId, data.id, { x: data.x, y: data.y, d: data.d});
+        PlayersManager.updatePlayerState(data.playerId, { x: data.x, y: data.y, d: data.d})
         io.to(data.roomId).emit("player:moved", data);
     }
     const playerAnim = (data) => {

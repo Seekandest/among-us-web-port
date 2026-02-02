@@ -44,15 +44,13 @@ router.get("/isImposter/", (req, res) => {
         res.json({isImposter: false});
     }
 });
-// TODO remove test endpoint
-router.get("/room/:roomId", (req, res) => {
+
+router.get("/rooms/:roomId", (req, res) => {
     const room = RoomsManager.fetchRoom(req.params.roomId);
     if (!room) {
         res.status(404).json({error: "Room not found"});
         return;
     }
-    // send as html for testing purposes
-    res.send(`<pre>${JSON.stringify(room, null, 2)}</pre>`);
-
+    res.json(room);
 });
 export default router;
