@@ -67,7 +67,7 @@ web_modules/
 
 # dotenv environment variable files
 backend/.env
-frontebd/.env
+frontend/.env
 .env.*
 !.env.example
 
