@@ -82,16 +82,18 @@ export const registerRoomEvents = (io, socket) => {
     }
     const gameStart = (data) => {
         console.log("Game start received:", data);
-        const room = RoomsManager.startGame(data.roomId);
-        if (!room) {
-            console.error("Room not found or could not start game:", data.roomId);
-            return;
-        }
-        if (Object.values(room.players).length <= 1) {
+        const room = RoomsManager.fetchRoom(data.roomId);
+        console.log("Room data for game start:", room);
+        if (Object.values(room.players).length <= 1) { // TODO DEBUG DISABLE
             console.error("No players in room, cannot start game:", data.roomId);
             socket.emit('game:notif', {message: "Need atleast 2 players to start the game"});
             return;
         }
+        if (!room) {
+            console.error("Room not found or could not start game:", data.roomId);
+            return;
+        }
+        RoomsManager.startGame(data.roomId);
         io.to(data.roomId).emit("game:started", data);
     }
     const sendMessage = (data) => {

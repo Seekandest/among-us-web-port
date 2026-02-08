@@ -39,6 +39,23 @@ export class Game extends BaseGameScene {
         };
     }
 
+    setupMeetingZone() {
+        this.meetingZone = this.physics.add.sprite(530, 100);
+        if (this.meetingZone.body) {
+            this.meetingZone.body.setCircle(50);
+            this.meetingZone.body.setAllowGravity(false);
+            this.meetingZone.visible = false;
+        }
+        this.meetingBtn = this.add.image(220, 410, 'meeting')
+            .setScale(0.7)
+            .setDepth(1000)
+            .setScrollFactor(0)
+            .setInteractive()
+            .on('pointerdown', () => {
+                this.startMeeting();
+            });
+        this.ui.add(this.meetingBtn);
+    }
 
     // ====== PHASER LIFECYCLE METHODS ======
     /**
@@ -50,6 +67,7 @@ export class Game extends BaseGameScene {
         this.load.image('kill', 'assets/icons/kill_icon.png');
         this.load.atlas('death', 'assets/death/texture.png', 'assets/death/texture.json');
         this.load.image('deadBody', 'assets/sprites/Base/Dead0042.png');
+        this.load.image('meeting', '/assets/icons/useIcon.png');
     }
 
     /**
@@ -84,6 +102,8 @@ export class Game extends BaseGameScene {
             this.imposter = results[1];
             handleImposter(this);
             setupVisionSystem(this);
+            this.setupMeetingZone();
+            this.isInMeetingZone = false;
         });
     }
 
@@ -93,10 +113,7 @@ export class Game extends BaseGameScene {
      * @param {number} delta - Time elapsed since last frame in milliseconds
      */
     update(time, delta) {
-        // Temp trigger for meetings
-        if (Phaser.Input.Keyboard.JustDown(this.mKey) && !this.meetingActive && this.player && this.player.alive) {
-            this.startMeeting();
-        }
+        if (!this.player) return;
 
         this.handleMovement();
         handleImposterMovement(this);
@@ -104,6 +121,16 @@ export class Game extends BaseGameScene {
         // Update vision system
         if (this.visionEnabled && this.player) {
             updateVisionSystem(this);
+        }
+
+        if (this.physics.overlap(this.player, this.meetingZone)) {
+            if (!this.isInMeetingZone) {
+                this.isInMeetingZone = true;
+                this.meetingBtn.visible = true;
+            }
+        } else if (this.isInMeetingZone) {
+            this.isInMeetingZone = false;
+            this.meetingBtn.visible = false;
         }
     }
 

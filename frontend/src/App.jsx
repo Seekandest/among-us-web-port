@@ -9,7 +9,6 @@ import EndGame from "./components/EndGame.jsx";
 import {EventBus} from './game/EventBus';
 import RoleIndicator from "./components/RoleIndicator.jsx";
 import { ToastContainer } from "./components/Toast.jsx";
-
 const PAGES = {MENU: 'lobby', WAITING: 'waiting', GAME: 'game', GAMEEND: 'gameend'};
 
 function App() {
@@ -60,11 +59,11 @@ function App() {
       console.log('Game started event received in App:', data, roomIdRef.current, data.roomId === roomId);
       if (data.roomId === roomIdRef.current) {
         data.playerId = playerIdRef.current;
-        setIsLocalPlayerImposter(data.isImposter);
         EventBus.emit('start-game', data);
         setCurrentPage(PAGES.GAME);
         data.isImposter.then((val) => {
           LocalImposterRef.current = val;
+          setIsLocalPlayerImposter(val);
           setRoleIndicator(true);
         });
       }

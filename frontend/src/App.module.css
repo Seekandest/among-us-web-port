@@ -110,3 +110,22 @@
   font-size: 14px;
   line-height: 1;
 }
+
+.uiContainer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 20px;
+}
+
+.killBtn {
+  padding: 12px 24px;
+  background-color: #e94560;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}

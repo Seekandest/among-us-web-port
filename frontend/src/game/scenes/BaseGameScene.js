@@ -81,21 +81,23 @@ export class BaseGameScene extends Scene {
 
         const map = this.make.tilemap({ key: config.mapKey });
         const tileset = map.addTilesetImage(config.tilesetName, config.tilesetKey);
-
         const collisionLayer = map.createLayer('collisions', tileset, 0, 0);
 
+
         this.background = this.add.image(0, 0, config.backgroundKey).setOrigin(0, 0).setName('background');
+        this.worldContainer.add(this.background);
 
         if (collisionLayer) {
             if (this.scene.key === 'WaitingLobby') {
                 const scaleX = 1232 / (map.widthInPixels);
                 const scaleY = 1008 / (map.heightInPixels);
                 collisionLayer.setScale(scaleX, scaleY);
-                collisionLayer.setVisible(false);
             }
 
+            collisionLayer.setVisible(false);
             collisionLayer.setCollisionByExclusion([-1, 0]);
             this.collisionLayer = collisionLayer;
+            this.worldContainer.add(collisionLayer);
 
             if (this.physics.config.debug) {
                 collisionLayer.setVisible(true);
@@ -192,10 +194,13 @@ export class BaseGameScene extends Scene {
         console.log("Created own player sprite:", this.player, this.players);
 
         // Set camera zoom based on scene type
+        //const zoom = 1;
         const zoom = this.scene.key === 'WaitingLobby' ? 1 : 3;
 
         this.cameras.main.setZoom(zoom);
         this.cameras.main.startFollow(this.player, true);
+        this.cameras.main.ignore(this.ui);
+
 
         // Add existing players in the room
         Object.values(this.room.players).forEach((player) => {
@@ -291,10 +296,18 @@ export class BaseGameScene extends Scene {
      * Common create logic for all game scenes
      */
     async createCommon() {
-        this.players = {};
         this.ui = this.add.container(0, 0).setScrollFactor(0).setDepth(1000);
-        this.spawnPositions = {}; // Track spawn positions for each player
-        this.meetingActive = false; // Track if meeting is active
+        this.worldContainer = this.add.container(0, 0).setDepth(0);
+        this.players = {};
+        this.spawnPositions = {};
+        // Track spawn positions for each player
+        const uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+        uiCam.setScroll(0, 0);
+        uiCam.setZoom(1);
+        uiCam.ignore(this.worldContainer);
+
+        this.cameras.main.ignore(this.ui);
+
         this.createWalkAnimation();
         this.setupMap();
         this.setupInput();

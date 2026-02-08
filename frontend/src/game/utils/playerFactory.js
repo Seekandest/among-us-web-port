@@ -22,6 +22,7 @@ export function createPlayer(scene, playerData, options = {}) {
         'player',
         'Walk0001.png'
     );
+    scene.worldContainer.add(player);
 
     if (addCollision && collisionLayer) {
         scene.physics.add.collider(player, collisionLayer);

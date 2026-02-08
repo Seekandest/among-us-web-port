@@ -11,16 +11,19 @@ const localPlayerId = sessionStorage.getItem('playerId');
 // player: {id, name, voted, color}
 export default function MeetingTile({player, votes, VoteCallBack}) {
   const [selected, setSelected] = useState(false);
+  const [localPlayerVoted, setLocalPlayerVoted] = useState(false);
 
   const handleConfirm = () => {
     setSelected(false);
     VoteCallBack({callerId: localPlayerId, votedForId: player.id});
+    setLocalPlayerVoted(true);
+
   }
   const handleCancel = () => {
     setSelected(false);
   }
   return <>
-  <div className={styles.tile} onClick={() => {!player.voted && setSelected(!selected)}}>
+  <div className={styles.tile} onClick={() => {!localPlayerVoted && setSelected(!selected)}}>
     <div className="flex flex-row">
     <div className={styles.playerIcon}>
       <img src={playerIcon} alt="Player Icon" className={styles.iconImage}/>

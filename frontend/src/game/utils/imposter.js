@@ -1,4 +1,5 @@
-// IMPOSTER MECHANICS
+import { EventBus } from "../EventBus.js";
+
 /**
  * Initialize imposter-specific UI and mechanics
  * Sets up kill button and detection zone for the imposter
@@ -36,8 +37,8 @@ export function handleImposter(scene) {
     };
 
     // Create kill button UI
-    scene.killBtn = scene.add.image(620, 410, 'kill')
-        .setScale(0.3)
+    scene.killBtn = scene.add.image(820, 410, 'kill')
+        .setScale(0.7)
         .setDepth(1000)
         .setScrollFactor(0)
         .setInteractive()
@@ -49,8 +50,6 @@ export function handleImposter(scene) {
     scene.zone = scene.physics.add.sprite(scene.player.x, scene.player.y, 100, 100);
     if (scene.zone.body) {
         scene.zone.body.setCircle(KILL_ZONE_RADIUS);
-        // Offset to center the zone on the sprite
-        scene.zone.body.setOffset(-KILL_ZONE_RADIUS + scene.zone.width / 2, -KILL_ZONE_RADIUS + scene.zone.height / 2);
         scene.zone.body.setAllowGravity(false);
         scene.zone.visible = false;
     }
@@ -65,9 +64,9 @@ export function handleImposterMovement(scene) {
 
     // Update kill button visual state based on whether a target is in range
     if (scene.killBtn) {
-        if (!scene.closest.player && scene.killBtn.pipeline.name !== 'GrayScale') {
+        if (!scene.closest.player && scene.killBtn.pipeline?.name !== 'GrayScale') {
             scene.killBtn.setPipeline('GrayScale');
-        } else if (scene.closest.player && scene.killBtn.pipeline.name === 'GrayScale') {
+        } else if (scene.closest.player && scene.killBtn.pipeline?.name === 'GrayScale') {
             scene.killBtn.resetPipeline();
         }
     }
