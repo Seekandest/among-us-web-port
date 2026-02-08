@@ -43,7 +43,7 @@ export const PlayersManager = {
      */
     updatePlayerState(id, state) {
         if (players[id]) {
-            players[id].state = state;
+            players[id].state = {...players[id].state, ...state};
         }
     },
 
@@ -57,7 +57,13 @@ export const PlayersManager = {
     getAllPlayers() {
         return Object.values(players);
     },
-
+    resetPlayer(id) {
+        if (players[id]) {
+            players[id].state = {x: 560, y: 150, d: 'left', moving: false};
+            players[id].isAlive = true;
+            players[id].isImposter = false;
+        }
+    },
     setRoomId(id, roomId) {
         if (players[id]) {
             players[id].roomId = roomId;

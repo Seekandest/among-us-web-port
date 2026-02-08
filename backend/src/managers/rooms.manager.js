@@ -133,7 +133,11 @@ export const RoomsManager = {
         }
 
         // Reset alive status for all players when starting
-        players.forEach(p => p.isAlive = true);
+        players.forEach(p => {
+            p.isAlive = true;
+            PlayersManager.updatePlayerState(p.id, {x: 560, y: 150, d: 'left', moving: false});
+        });
+
 
         const idx = Math.floor(Math.random() * players.length);
         rooms[roomId].imposter = players[idx].id;

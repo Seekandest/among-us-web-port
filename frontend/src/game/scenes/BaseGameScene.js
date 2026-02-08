@@ -193,6 +193,7 @@ export class BaseGameScene extends Scene {
 
         // Set camera zoom based on scene type
         const zoom = this.scene.key === 'WaitingLobby' ? 1 : 3;
+
         this.cameras.main.setZoom(zoom);
         this.cameras.main.startFollow(this.player, true);
 

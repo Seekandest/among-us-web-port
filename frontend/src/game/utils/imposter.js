@@ -28,8 +28,6 @@ export function handleImposter(scene) {
         console.log('Emitting player:kill', payload);
         scene.socket.emit('player:kill', payload);
 
-        // Move imposter sprite to victim position locally
-        // (do NOT emit player:move here — wait for server's player:killed broadcast)
         scene.player.x = victim.x;
         scene.player.y = victim.y;
 
@@ -38,13 +36,14 @@ export function handleImposter(scene) {
     };
 
     // Create kill button UI
-    scene.killBtn = scene.add.image(720, 420, 'kill')
-        .setScale(0.35)
+    scene.killBtn = scene.add.image(620, 410, 'kill')
+        .setScale(0.3)
         .setDepth(1000)
         .setScrollFactor(0)
         .setInteractive()
         .on('pointerdown', handleKill);
     scene.ui.add(scene.killBtn);
+    console.log("Kill button created", scene.killBtn);
 
     // Create invisible detection zone around imposter
     scene.zone = scene.physics.add.sprite(scene.player.x, scene.player.y, 100, 100);

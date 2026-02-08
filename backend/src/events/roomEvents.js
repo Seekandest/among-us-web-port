@@ -1,6 +1,9 @@
 import {PlayersManager} from "../managers/players.manager.js";
 import {RoomsManager} from "../managers/rooms.manager.js";
 
+// Track socket to player mapping for cleanup on disconnect
+const socketToPlayerId = {};
+
 export const registerRoomEvents = (io, socket) => {
     /**
      * @param {{id: string, name: string, color: string}} data
@@ -35,7 +38,14 @@ export const registerRoomEvents = (io, socket) => {
      */
     const roomJoin = (data) => {
         console.log("Room join received:", data);
+        // Track socket to player mapping for cleanup on unexpected disconnect
+        socketToPlayerId[socket.id] = data.playerId;
+
         let player = PlayersManager.getPlayer(data.playerId);
+        if (player.roomId !== data.roomId) {
+            roomLeave({playerId: data.playerId});
+        }
+
         const room = RoomsManager.fetchRoom(data.roomId);
         if (!room || room.started) {
             socket.emit("room:join:error", {message: "Room not found or game already started"});
@@ -44,7 +54,6 @@ export const registerRoomEvents = (io, socket) => {
         }
         if (player) {
             player = RoomsManager.players.add(data.roomId, player);
-            // console.log("Player after setting roomId and adding to room:", player, data.roomId);
             socket.join(data.roomId)
             // TODO remove sending whole room object with imposter
             socket.emit("room:joined", {roomId: data.roomId, room, player, started: room.started});
@@ -57,6 +66,7 @@ export const registerRoomEvents = (io, socket) => {
         if (player) {
             const roomId = player.roomId;
             const {deleted} = RoomsManager.players.remove(roomId, player);
+            PlayersManager.resetPlayer(data.playerId);
             const win = RoomsManager.checkWin(roomId);
             console.log("Win condition check after player leave:", win);
             if (!(win === null)) {
@@ -83,24 +93,60 @@ export const registerRoomEvents = (io, socket) => {
         console.log("Send message received:", data);
         io.to(data.roomId).emit("room:message", {playerId: data.playerId, message: data.message});
     }
-    const disconnect = (data) => {
+    const disconnect = (reason) => {
+        console.log("Socket disconnected. Reason:", reason);
+        // Handle unexpected disconnections by cleaning up the player
+        const playerId = socketToPlayerId[socket.id];
+        if (playerId) {
+            console.log("Cleaning up disconnected player:", playerId);
+            const player = PlayersManager.getPlayer(playerId);
+            if (player && player.roomId) {
+                const roomId = player.roomId;
+                const {deleted} = RoomsManager.players.remove(roomId, player);
+                socket.to(roomId).emit("player:left", {playerId: player.id});
+                PlayersManager.deletePlayer(playerId);
+
+                // Check win condition after player removal
+                const win = RoomsManager.checkWin(roomId);
+                if (!(win === null)) {
+                    io.to(roomId).emit("game:ended", {roomId, isImposter: win});
+                }
+
+                if (deleted) {
+                    io.emit("room:deleted", {roomId});
+                }
+            }
+            delete socketToPlayerId[socket.id];
+        }
+    }
+    const playerDisconnect = (data) => {
         console.log("Player disconnected:", data);
         const player = PlayersManager.getPlayer(data.playerId);
         if (player) {
             const roomId = player.roomId;
             const {deleted} = RoomsManager.players.remove(roomId, player);
             socket.to(roomId).emit("player:left", {playerId: player.id});
-            PlayersManager.deletePlayer(player.id);
+            PlayersManager.deletePlayer(data.playerId);
+
+            // Check win condition after player removal
+            const win = RoomsManager.checkWin(roomId);
+            if (!(win === null)) {
+                io.to(roomId).emit("game:ended", {roomId, isImposter: win});
+            }
+
             if (deleted) {
                 io.emit("room:deleted", {roomId});
             }
         }
+        // Clean up socket mapping
+        delete socketToPlayerId[socket.id];
     }
     socket.on("log", (data) => {
         console.log(data)
     });
     socket.on("player:register", playerRegister);
     socket.on("player:unregister", playerUnregister);
+    socket.on("player:disconnect", playerDisconnect);
     socket.on("room:create", roomCreate);
     socket.on("room:join", roomJoin);
     socket.on("room:leave", roomLeave);
