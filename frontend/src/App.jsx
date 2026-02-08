@@ -8,6 +8,7 @@ import Meeting from "./components/Meeting.jsx";
 import EndGame from "./components/EndGame.jsx";
 import {EventBus} from './game/EventBus';
 import RoleIndicator from "./components/RoleIndicator.jsx";
+import { ToastContainer } from "./components/Toast.jsx";
 
 const PAGES = {MENU: 'lobby', WAITING: 'waiting', GAME: 'game', GAMEEND: 'gameend'};
 
@@ -19,7 +20,7 @@ function App() {
   const [socket, setSocket] = useState(null);
   const playerIdRef = useRef(null);
   const [error, setError] = useState(null);
-
+  const debug = useRef(import.meta.env.VITE_DEBUG === 'true');
   // Meeting state
   const [meetingActive, setMeetingActive] = useState(false);
   const [meetingData, setMeetingData] = useState(null);
@@ -29,6 +30,20 @@ function App() {
   const [isLocalPlayerHost, setIsLocalPlayerHost] = useState(false);
   const LocalImposterRef = useRef(false); // TODO remove unwanted states with ref
   const [roleIndicator, setRoleIndicator] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (window.showToast) {
+        window.showToast(
+          'Server might be experiencing slow loading times. Please be patient.',
+          'warning',
+          0
+        );
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     socketService.connect();
@@ -79,11 +94,17 @@ function App() {
       console.log('Vote event received in App:', data, meetingData);
       setMeetingData(prev => ({...prev, players: {...prev.players, [data.callerId]: {...prev.players[data.callerId], voted: true}}}));
     };
+    const handleNotif = (data) => {
+      if (window.showToast) {
+        window.showToast(data.message, 'info', 3000);
+      }
+    }
 
     sockett.on('connect', handleConnect);
     sockett.on('disconnect', handleDisconnect);
     sockett.on('game:started', handleStartGame);
     sockett.on('meeting:voted', handleVote);
+    sockett.on('game:notif', handleNotif);
 
     EventBus.on('meeting:started', handleMeetingStarted);
     EventBus.on('meeting:ended', handleMeetingEnded);
@@ -94,6 +115,7 @@ function App() {
       sockett.off('disconnect', handleDisconnect);
       sockett.off('game:started', handleStartGame);
       sockett.off('meeting:voted', handleVote);
+      sockett.off('game:notif', handleNotif);
       EventBus.off('meeting:started', handleMeetingStarted);
       EventBus.off('meeting:ended', handleMeetingEnded);
       EventBus.off('game:ended', handleGameEnd);
@@ -154,10 +176,11 @@ function App() {
 
   return (
     <div id="app">
+      <ToastContainer />
       {error && <p className={styles.error}>{error}</p>}
-      <div className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
+      {debug.current && <div className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
         {isConnected ? 'Connected' : 'Disconnected'}
-      </div>
+      </div>}
       {roleIndicator && <RoleIndicator
         role={{imposter: LocalImposterRef.current}}
         onAnimationEnd={() => {setRoleIndicator(false)}}

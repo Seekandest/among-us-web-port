@@ -87,6 +87,11 @@ export const registerRoomEvents = (io, socket) => {
             console.error("Room not found or could not start game:", data.roomId);
             return;
         }
+        if (Object.values(room.players).length <= 1) {
+            console.error("No players in room, cannot start game:", data.roomId);
+            socket.emit('game:notif', {message: "Need atleast 2 players to start the game"});
+            return;
+        }
         io.to(data.roomId).emit("game:started", data);
     }
     const sendMessage = (data) => {
