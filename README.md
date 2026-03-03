@@ -1,11 +1,9 @@
 # Among Us
-___
 A multiplayer web based clone of game among us built with Phaser 3, React, and Node.js.
 
 **Live Demo:** [https://among-us-mocha.vercel.app](https://among-us-mocha.vercel.app)
 
 ## Project Structure
-___
 ```
 among-us/
 ├── frontend/                 # React + Phaser 3 frontend application
@@ -27,7 +25,6 @@ among-us/
 └── misc/                     # Miscellaneous files
 ```
 ## Important Files
-___
 ### Frontend
 ```
 /frontend/src/pages/Menu.jsx
@@ -52,7 +49,6 @@ Contains files to manage the game state, like player updates and game room updat
 ```
 
 ## Technology Stack
-___
 ### Frontend
 - **React** 19.0.0 - UI library
 - **Phaser** 3.90.0 - Game framework
@@ -66,7 +62,6 @@ ___
 - **Socket.io** 4.8.3 - Real-time communication
 
 ## Features
-___
 - Real-time multiplayer gameplay
 - Multiplayer room management
 - Socket.io for live player communication
@@ -75,12 +70,10 @@ ___
 ## Getting Started
 
 ### Prerequisites
-___
 - Node.js (v16 or higher)
 - npm or yarn
 
 ### Installation
-___
 1. Clone the repository:
 ```bash
 git clone https://github.com/i250882-os/among-us.git
@@ -102,7 +95,6 @@ cd ..
 ```
 
 ## Development
-___
 ### Frontend Development
 
 ```bash
@@ -135,7 +127,6 @@ cd backend
 npm start
 ```
 ## Configuration
-___
 ### Frontend Environment Variables
 
 The frontend uses environment variables defined in `.env`:
@@ -156,11 +147,9 @@ VITE_SOCKET_URL=http://192.168.1.10:3000
 ALLOWED_ORIGIN=192.168.1.10
 ```
 ### TODO
-___
 - [ ] Improve lobby area UX
 - [ ] Add tasks system
 - [ ] Fix voting system bugs
 
 ## License
-___
 This project is licensed under the MIT License - see the LICENSE file for details.
