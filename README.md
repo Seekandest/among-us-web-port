@@ -1,7 +1,11 @@
 # Among Us
 A multiplayer web based clone of game among us built with Phaser 3, React, and Node.js.
 
-**Live Demo:** [https://among-us-mocha.vercel.app](https://among-us-mocha.vercel.app)
+
+
+https://github.com/user-attachments/assets/bdd8ef37-4397-46ca-a9a9-42f1fd0e4a7d
+
+
 
 ## Project Structure
 ```
