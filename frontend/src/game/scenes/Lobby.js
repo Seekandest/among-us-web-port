@@ -3,7 +3,6 @@ import {socketService} from '../../services/socket.js';
 import { apiUrl } from '../../utils/urls.js';
 import {EventBus} from '../EventBus.js';
 
-const URL = import.meta.env.VITE_HOST;
 /**
  * Waiting lobby scene - extends BaseGameScene with lobby-specific map and rules
  */

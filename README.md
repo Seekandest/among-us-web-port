@@ -127,25 +127,38 @@ cd backend
 npm start
 ```
 ## Configuration
-### Frontend Environment Variables
 
-The frontend uses environment variables defined in `.env`:
+The backend serves **both** the REST API and Socket.IO on a **single port** (default `3000`).
 
-```
-VITE_HOST=192.168.1.10
-VITE_BACKEND_PROTOCOL=http
-```
+### Local development (recommended)
 
-You can override with full URLs:
+Leave `VITE_BACKEND_URL` / `VITE_SOCKET_URL` **unset**. The browser talks to the Vite origin (`http://localhost:8080`), and Vite proxies API + Socket.IO to the backend — no CORS setup needed.
+
+`frontend/.env`:
 ```
-VITE_BACKEND_URL=http://192.168.1.10:3001
-VITE_SOCKET_URL=http://192.168.1.10:3000
+VITE_PROXY_TARGET=http://localhost:3000
 ```
 
-### Backend Environment Variables
+`backend/.env`:
 ```
-ALLOWED_ORIGIN=192.168.1.10
+PORT=3000
+ALLOWED_ORIGIN=http://localhost:8080
 ```
+
+### Production / direct backend
+
+Set absolute URLs at **frontend build time** (API and sockets share one origin):
+```
+VITE_BACKEND_URL=https://your-backend.example.com
+# optional override if sockets were ever on a different host:
+# VITE_SOCKET_URL=https://your-backend.example.com
+```
+
+Backend allowed origins (full URLs, comma-separated):
+```
+ALLOWED_ORIGIN=https://your-frontend.example.com,http://localhost:8080
+```
+
 ### TODO
 - [ ] Improve lobby area UX
 - [ ] Add tasks system

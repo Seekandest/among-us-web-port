@@ -76,10 +76,9 @@ export function Menu({onJoinGame}) {
     socket.on('player:unregistered', onPlayerUnregistered);
     socket.on('room:join:error', handleCantJoin);
 
-    fetch(apiUrl('/rooms'))
-      .then(response => response.json())
-      .then(data => {setRooms(data)})
-      .catch(error => console.error('Error fetching rooms:', error));
+    fetchRooms()
+      .then(setRooms)
+      .catch((error) => console.error('Error fetching rooms:', error));
 
     return () => {
       socket.off('room:created', onRoomCreated);
@@ -134,25 +133,27 @@ export function Menu({onJoinGame}) {
   };
 
   const handleFetchRooms = () => {
-    fetch(apiUrl('/rooms'))
-      .then(response => response.json())
-      .then(data => {setRooms(data)})
-      .catch(error => console.error('Error fetching rooms:', error));
-  }
+    fetchRooms()
+      .then(setRooms)
+      .catch((error) => console.error('Error fetching rooms:', error));
+  };
+
   const handleJoinRoom = (roomId) => {
     if (!isRegisteredRef.current) {
       setError('Please register first');
       return;
     }
     console.log('Joining room:', roomId);
-    let data;
     fetch(apiUrl(`/rooms/${roomId}`))
-      .then(response => response.json())
-      .then(data => {
+      .then((response) => {
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
         console.log(data);
-        if (data) {
-          const taken_colors = Object.values(data.players).map(p => p.color);
-          const taken_names = Object.values(data.players).map(p => p.name);
+        if (data?.players) {
+          const taken_colors = Object.values(data.players).map((p) => p.color);
+          const taken_names = Object.values(data.players).map((p) => p.name);
           if (taken_names.includes(playerName)) {
             setError('Name already taken in this room');
             return;
@@ -164,12 +165,13 @@ export function Menu({onJoinGame}) {
         }
         const playerId = getPlayerId();
         socket.emit('room:join', {
-          playerId: playerId, roomId: roomId,
+          playerId: playerId,
+          roomId: roomId,
         });
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Error fetching room data:', error);
-        return null;
+        setError('Could not join room — is the server running?');
       });
   };
 
@@ -232,6 +234,30 @@ export function Menu({onJoinGame}) {
       {error && <p className={styles.error}>{error}</p>}
     </div>
   </div>);
+}
+
+/**
+ * Backend returns an array of rooms; UI stores them keyed by id.
+ * @param {unknown} data
+ * @returns {Record<string, object>}
+ */
+function roomsToMap(data) {
+  if (Array.isArray(data)) {
+    return Object.fromEntries(data.map((room) => [room.id, room]));
+  }
+  if (data && typeof data === 'object') {
+    return data;
+  }
+  return {};
+}
+
+async function fetchRooms() {
+  const response = await fetch(apiUrl('/rooms'));
+  if (!response.ok) {
+    throw new Error(`Failed to fetch rooms: ${response.status}`);
+  }
+  const data = await response.json();
+  return roomsToMap(data);
 }
 
 function generateRoomId() {

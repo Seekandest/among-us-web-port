@@ -13,8 +13,12 @@ export const registerGameEvents = (io, socket) => {
 
     // ====== PLAYER EVENTS ======
     const playerMove = (data) => {
-        RoomsManager.players.updateState(data.roomId, data.id, { x: data.x, y: data.y, d: data.d});
-        PlayersManager.updatePlayerState(data.playerId, { x: data.x, y: data.y, d: data.d, moving: data.moving });
+        // Frontend emits `id`; accept either id or playerId
+        const playerId = data.id ?? data.playerId;
+        if (!data.roomId || !playerId) return;
+
+        RoomsManager.players.updateState(data.roomId, playerId, { x: data.x, y: data.y, d: data.d });
+        PlayersManager.updatePlayerState(playerId, { x: data.x, y: data.y, d: data.d, moving: data.moving });
         io.to(data.roomId).emit("player:moved", data);
     }
     const playerAnim = (data) => {

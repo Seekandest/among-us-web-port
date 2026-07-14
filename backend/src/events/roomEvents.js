@@ -38,11 +38,22 @@ export const registerRoomEvents = (io, socket) => {
      */
     const roomJoin = (data) => {
         console.log("Room join received:", data);
+        if (!data?.playerId || !data?.roomId) {
+            socket.emit("room:join:error", {message: "Missing playerId or roomId"});
+            return;
+        }
+
         // Track socket to player mapping for cleanup on unexpected disconnect
         socketToPlayerId[socket.id] = data.playerId;
 
         let player = PlayersManager.getPlayer(data.playerId);
-        if (player.roomId !== data.roomId) {
+        if (!player) {
+            socket.emit("room:join:error", {message: "Player not registered. Register first."});
+            console.error("Player not found for room join:", data.playerId);
+            return;
+        }
+
+        if (player.roomId && player.roomId !== data.roomId) {
             roomLeave({playerId: data.playerId});
         }
 
@@ -52,45 +63,50 @@ export const registerRoomEvents = (io, socket) => {
             console.error("Room not found or game already started:", data.roomId);
             return;
         }
-        if (player) {
-            player = RoomsManager.players.add(data.roomId, player);
-            socket.join(data.roomId)
-            // TODO remove sending whole room object with imposter
-            socket.emit("room:joined", {roomId: data.roomId, room, player, started: room.started});
-            socket.to(data.roomId).emit("player:joined", {player, roomId: data.roomId});
-        }
+
+        player = RoomsManager.players.add(data.roomId, player);
+        socket.join(data.roomId);
+        // TODO remove sending whole room object with imposter
+        socket.emit("room:joined", {roomId: data.roomId, room, player, started: room.started});
+        socket.to(data.roomId).emit("player:joined", {player, roomId: data.roomId});
     }
     const roomLeave = (data) => {
         console.log("Room leave received:", data);
         const player = PlayersManager.getPlayer(data.playerId);
-        if (player) {
-            const roomId = player.roomId;
-            const {deleted} = RoomsManager.players.remove(roomId, player);
+        if (!player) return;
+
+        const roomId = player.roomId;
+        if (!roomId) {
             PlayersManager.resetPlayer(data.playerId);
-            const win = RoomsManager.checkWin(roomId);
-            console.log("Win condition check after player leave:", win);
-            if (!(win === null)) {
-                io.to(roomId).emit("game:ended", {roomId, isImposter: win});
-            }
-            io.to(roomId).emit("player:left", {playerId: player.id});
-            PlayersManager.setRoomId(player.id, null);
-            socket.leave(roomId);
-            if (deleted) {
-                io.emit("room:deleted", {roomId});
-            }
+            return;
+        }
+
+        const { deleted } = RoomsManager.players.remove(roomId, player);
+        PlayersManager.resetPlayer(data.playerId);
+        const win = RoomsManager.checkWin(roomId);
+        console.log("Win condition check after player leave:", win);
+        if (win !== null) {
+            io.to(roomId).emit("game:ended", { roomId, isImposter: win });
+        }
+        io.to(roomId).emit("player:left", { playerId: player.id });
+        PlayersManager.setRoomId(player.id, null);
+        socket.leave(roomId);
+        if (deleted) {
+            io.emit("room:deleted", { roomId });
         }
     }
     const gameStart = (data) => {
         console.log("Game start received:", data);
         const room = RoomsManager.fetchRoom(data.roomId);
-        console.log("Room data for game start:", room);
-        if (Object.values(room.players).length <= 1) { // TODO DEBUG DISABLE
-            console.error("No players in room, cannot start game:", data.roomId);
-            socket.emit('game:notif', {message: "Need atleast 2 players to start the game"});
-            return;
-        }
         if (!room) {
             console.error("Room not found or could not start game:", data.roomId);
+            socket.emit('game:notif', {message: "Room not found"});
+            return;
+        }
+        console.log("Room data for game start:", room);
+        if (Object.values(room.players).length <= 1) {
+            console.error("Not enough players in room, cannot start game:", data.roomId);
+            socket.emit('game:notif', {message: "Need at least 2 players to start the game"});
             return;
         }
         RoomsManager.startGame(data.roomId);

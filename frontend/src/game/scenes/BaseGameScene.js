@@ -4,7 +4,6 @@ import { apiUrl } from '../../utils/urls.js';
 import { EventBus } from '../EventBus';
 import { createPlayer } from '../utils/playerFactory.js';
 
-const RL = import.meta.env.VITE_HOST;
 /**
  * Base class for shared logic of player management, movement, and socket events
  */
@@ -176,12 +175,20 @@ export class BaseGameScene extends Scene {
         console.log("Fetching room data for playerId:", playerId, "socket id:", socket?.id);
 
         const response = await fetch(apiUrl(`/player/room/${playerId}`));
+        if (!response.ok) {
+            const errBody = await response.text().catch(() => '');
+            console.error("Failed to fetch player room:", response.status, errBody);
+            return;
+        }
         const data = await response.json();
 
-        console.log("room joined event received");
         console.log("room joined data:", data);
 
         if (!this.sys || !this.sys.displayList) return;
+        if (!data?.room || !data?.player) {
+            console.error("Invalid room payload:", data);
+            return;
+        }
 
         this.room = data.room;
         this.player = this.addPlayer({
@@ -194,13 +201,11 @@ export class BaseGameScene extends Scene {
         console.log("Created own player sprite:", this.player, this.players);
 
         // Set camera zoom based on scene type
-        //const zoom = 1;
         const zoom = this.scene.key === 'WaitingLobby' ? 1 : 3;
 
         this.cameras.main.setZoom(zoom);
         this.cameras.main.startFollow(this.player, true);
         this.cameras.main.ignore(this.ui);
-
 
         // Add existing players in the room
         Object.values(this.room.players).forEach((player) => {
