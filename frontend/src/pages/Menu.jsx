@@ -1,7 +1,6 @@
 import React, {useState, useEffect, useRef} from 'react';
-import socketService from '../services/socket';
+import net from '../services/net.js';
 import styles from './room.module.css';
-import { apiUrl } from '../utils/urls.js';
 import {Button} from '../components/Button.jsx';
 
 /**
@@ -14,8 +13,9 @@ export function Menu({onJoinGame}) {
   const isRegisteredRef = useRef(false);
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState({});
-
-  const socket = socketService.getSocket();
+  // Latest callback, without re-subscribing to the network on every render.
+  const onJoinGameRef = useRef(onJoinGame);
+  onJoinGameRef.current = onJoinGame;
 
   useEffect(() => {
     const savedName = localStorage.getItem('playerName');
@@ -25,18 +25,10 @@ export function Menu({onJoinGame}) {
   }, []);
 
   useEffect(() => {
-    const onRoomCreated = (data) => {
-      console.log('Room created (broadcast):', data);
-      setRooms(prev => ({...prev, [data.roomId]: data.room}));
-    };
-
-    const onRoomDeleted = (data) => {
-      console.log('Room deleted (broadcast):', data);
-      setRooms(prev => {
-        const updated = {...prev};
-        delete updated[data.roomId];
-        return updated;
-      });
+    // The server PUSHES the whole room list to every client whenever a room changes
+    // (created, joined, left, started, deleted): no polling, no HTTP request.
+    const onRoomsList = (data) => {
+      setRooms(roomsToMap(data.rooms));
     };
 
     const onRoomJoined = (data) => {
@@ -50,7 +42,7 @@ export function Menu({onJoinGame}) {
       //     color = getRandomColor();
       //   }
       // }
-      onJoinGame({roomId: data.roomId, playerId, isHost: data.room.host.id === playerId});
+      onJoinGameRef.current({roomId: data.roomId, playerId, isHost: data.room.host.id === playerId});
     };
 
     const onPlayerRegistered = () => {
@@ -69,27 +61,35 @@ export function Menu({onJoinGame}) {
       setError(data.message || 'Cannot join room');
     };
 
-    socket.on('room:created', onRoomCreated);
-    socket.on('room:deleted', onRoomDeleted);
-    socket.on('room:joined', onRoomJoined);
-    socket.on('player:registered', onPlayerRegistered);
-    socket.on('player:unregistered', onPlayerUnregistered);
-    socket.on('room:join:error', handleCantJoin);
-
-    fetchRooms()
-      .then(setRooms)
-      .catch((error) => console.error('Error fetching rooms:', error));
-
-    return () => {
-      socket.off('room:created', onRoomCreated);
-      socket.off('room:deleted', onRoomDeleted);
-      socket.off('room:joined', onRoomJoined);
-      socket.off('player:registered', onPlayerRegistered);
-      socket.off('player:unregistered', onPlayerUnregistered);
-      socket.off('room:join:error', handleCantJoin);
+    const handleCantRegister = (data) => {
+      isRegisteredRef.current = false;
+      setIsRegistered(false);
+      setError(data.message || 'Cannot register');
     };
 
-  }, [socket, onJoinGame]);
+    const askForRooms = () => net.emit('rooms:get', {});
+
+    net.on('rooms:list', onRoomsList);
+    net.on('room:joined', onRoomJoined);
+    net.on('player:registered', onPlayerRegistered);
+    net.on('player:unregistered', onPlayerUnregistered);
+    net.on('room:join:error', handleCantJoin);
+    net.on('player:register:error', handleCantRegister);
+    net.on('connect', askForRooms);
+
+    net.ready.then(() => { if (net.connected) askForRooms(); });
+
+    return () => {
+      net.off('rooms:list', onRoomsList);
+      net.off('room:joined', onRoomJoined);
+      net.off('player:registered', onPlayerRegistered);
+      net.off('player:unregistered', onPlayerUnregistered);
+      net.off('room:join:error', handleCantJoin);
+      net.off('player:register:error', handleCantRegister);
+      net.off('connect', askForRooms);
+    };
+
+  }, []);
 
   const handleRegister = () => {
     if (!playerName.trim()) {
@@ -97,7 +97,7 @@ export function Menu({onJoinGame}) {
       return;
     }
 
-    if (!socket.id) {
+    if (!net.connected) {
       setError('Not connected to server');
       return;
     }
@@ -109,33 +109,23 @@ export function Menu({onJoinGame}) {
     const playerColor = selectedColor || getRandomColor();
     console.log('Registering player with color:', playerColor, 'Selected:', selectedColor);
 
-    socket.emit('player:register', {
+    net.emit('player:register', {
       id: playerId, name: playerName.trim(), color: playerColor,
     });
 
     setError('');
   };
   const handleBackToRegister = () => {
-    const playerId = getPlayerId();
-    socket.emit('player:unregister', {playerId});
+    // The server knows who we are from our connection (session), no id needed in the payload.
+    net.emit('player:unregister', {});
   }
   const handleCreateRoom = () => {
     if (!isRegisteredRef.current) {
       setError('Please register first');
       return;
     }
-
-    const newRoomId = generateRoomId();
-    const playerId = getPlayerId();
-    socket.emit('room:create', {
-      hostId: playerId, roomId: newRoomId,
-    });
-  };
-
-  const handleFetchRooms = () => {
-    fetchRooms()
-      .then(setRooms)
-      .catch((error) => console.error('Error fetching rooms:', error));
+    setError('');
+    net.emit('room:create', {roomId: generateRoomId()});
   };
 
   const handleJoinRoom = (roomId) => {
@@ -144,35 +134,10 @@ export function Menu({onJoinGame}) {
       return;
     }
     console.log('Joining room:', roomId);
-    fetch(apiUrl(`/rooms/${roomId}`))
-      .then((response) => {
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
-        return response.json();
-      })
-      .then((data) => {
-        console.log(data);
-        if (data?.players) {
-          const taken_colors = Object.values(data.players).map((p) => p.color);
-          const taken_names = Object.values(data.players).map((p) => p.name);
-          if (taken_names.includes(playerName)) {
-            setError('Name already taken in this room');
-            return;
-          }
-          if (selectedColor && taken_colors.includes(selectedColor)) {
-            setError('Color already taken in this room');
-            return;
-          }
-        }
-        const playerId = getPlayerId();
-        socket.emit('room:join', {
-          playerId: playerId,
-          roomId: roomId,
-        });
-      })
-      .catch((error) => {
-        console.error('Error fetching room data:', error);
-        setError('Could not join room — is the server running?');
-      });
+    setError('');
+    // The server checks everything (room exists, not started, name free) and picks a free color
+    // if ours is taken. Success -> room:joined, failure -> room:join:error {message}.
+    net.emit('room:join', {roomId});
   };
 
   return (<div className={styles.container}>
@@ -187,7 +152,7 @@ export function Menu({onJoinGame}) {
           value={playerName}
           onChange={(e) => setPlayerName(e.target.value)}
           className={styles.input}
-          maxLength={20}
+          maxLength={16}
         />
 
         <div className={styles.colorPickerSection}>
@@ -223,6 +188,7 @@ export function Menu({onJoinGame}) {
               {Object.values(rooms).map((room) => (
                 <li className={styles.lobbyCard} key={room.id} onClick={() => handleJoinRoom(room.id)}>
                   <span className={styles.roomId}>{room.id}</span> - Host: <span className={styles.highlight}>{room.host.name}</span> - Players: <span className={styles.highlight}>{Object.keys(room.players).length}</span>
+                  {room.started && <span className={styles.highlight}> (in game)</span>}
                 </li>
               ))}
             </ul>
@@ -249,15 +215,6 @@ function roomsToMap(data) {
     return data;
   }
   return {};
-}
-
-async function fetchRooms() {
-  const response = await fetch(apiUrl('/rooms'));
-  if (!response.ok) {
-    throw new Error(`Failed to fetch rooms: ${response.status}`);
-  }
-  const data = await response.json();
-  return roomsToMap(data);
 }
 
 function generateRoomId() {

@@ -1,80 +1,100 @@
 import {useState, useEffect, useRef} from 'react';
 import {PhaserGame} from './PhaserGame';
-import socketService from './services/socket';
+import net from './services/net.js';
 import Menu from './pages/Menu.jsx';
 import styles from './App.module.css';
 import Button from "./components/Button.jsx";
 import Meeting from "./components/Meeting.jsx";
 import EndGame from "./components/EndGame.jsx";
+import NetHud from "./components/NetHud.jsx";
 import {EventBus} from './game/EventBus';
 import RoleIndicator from "./components/RoleIndicator.jsx";
 import { ToastContainer } from "./components/Toast.jsx";
 const PAGES = {MENU: 'lobby', WAITING: 'waiting', GAME: 'game', GAMEEND: 'gameend'};
 
+const toast = (message, type = 'info', duration = 3000) => {
+  if (window.showToast) window.showToast(message, type, duration);
+};
+
 function App() {
   const [currentPage, setCurrentPage] = useState(PAGES.MENU);
   const [roomId, setRoomId] = useState(null);
   const roomIdRef = useRef(null)
-  const [isConnected, setIsConnected] = useState(false);
-  const [socket, setSocket] = useState(null);
+  const [isConnected, setIsConnected] = useState(net.connected);
   const playerIdRef = useRef(null);
   const [error, setError] = useState(null);
   const debug = useRef(import.meta.env.VITE_DEBUG === 'true');
   // Meeting state
   const [meetingActive, setMeetingActive] = useState(false);
   const [meetingData, setMeetingData] = useState(null);
-  const [timeRemaining, setTimeRemaining] = useState(60000);
+  const [timeRemaining, setTimeRemaining] = useState(30000);
   const [gameResult, setGameResult] = useState(null);
   const [isLocalPlayerImposter, setIsLocalPlayerImposter] = useState(false);
   const [isLocalPlayerHost, setIsLocalPlayerHost] = useState(false);
   const LocalImposterRef = useRef(false); // TODO remove unwanted states with ref
   const [roleIndicator, setRoleIndicator] = useState(false);
+  // The connection lives in Electron's main process; we only remember whether it dropped.
+  const lostConnectionRef = useRef(false);
+  // A game:started that arrived while the waiting-lobby scene was not running yet (e.g. we were
+  // still on the end screen when the host started the next game): replayed when the lobby is ready.
+  const pendingStartRef = useRef(null);
+  const sceneRef = useRef(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (window.showToast) {
-        window.showToast(
-          'Server might be experiencing slow loading times. Please be patient.',
-          'warning',
-          0
-        );
-      }
-    }, 500);
+    if (!net.available) return;
 
-    return () => clearTimeout(timer);
-  }, []);
+    const handleConnect = () => {
+      setIsConnected(true);
+      // The server deleted our player when the connection dropped: start again from a clean page.
+      if (lostConnectionRef.current) window.location.reload();
+    };
+    const handleDisconnect = (reason) => {
+      setIsConnected(false);
+      lostConnectionRef.current = true;
+      toast(`Connection lost (${reason}), reconnecting…`, 'error', 0);
+    };
 
-  useEffect(() => {
-    socketService.connect();
-    const sockett = socketService.getSocket();
-    if (!sockett) {
-      console.warn('Socket unavailable after connect()');
-      return;
-    }
-    setSocket(sockett);
+    const startLobbyScene = (data) => {
+      EventBus.emit('start-game', data);
+    };
+    const lobbyIsRunning = () => {
+      const scene = sceneRef.current;
+      return Boolean(scene && scene.scene && scene.scene.key === 'WaitingLobby' && scene.sys && scene.sys.isActive());
+    };
 
-    const handleConnect = () => setIsConnected(true);
-    const handleDisconnect = () => setIsConnected(false);
+    // Private message: only WE receive our role, as a plain boolean.
     const handleStartGame = (data) => {
-      console.log('Game started event received in App:', data, roomIdRef.current, data.roomId === roomId);
-      if (data.roomId === roomIdRef.current) {
-        data.playerId = playerIdRef.current;
-        EventBus.emit('start-game', data);
-        setCurrentPage(PAGES.GAME);
-        data.isImposter.then((val) => {
-          LocalImposterRef.current = val;
-          setIsLocalPlayerImposter(val);
-          setRoleIndicator(true);
-        });
+      console.log('Game started event received in App:', data, roomIdRef.current);
+      if (data.roomId !== roomIdRef.current) return;
+      const start = {...data, playerId: playerIdRef.current};
+      setGameResult(null);
+      setMeetingActive(false);
+      setMeetingData(null);
+      setCurrentPage(PAGES.GAME);
+      if (lobbyIsRunning()) startLobbyScene(start);
+      else pendingStartRef.current = start;
+      Promise.resolve(data.isImposter).then((val) => {
+        LocalImposterRef.current = val;
+        setIsLocalPlayerImposter(val);
+        setRoleIndicator(true);
+      });
+    };
+
+    const handleSceneReady = (scene) => {
+      sceneRef.current = scene;
+      if (scene?.scene?.key === 'WaitingLobby' && pendingStartRef.current) {
+        const start = pendingStartRef.current;
+        pendingStartRef.current = null;
+        startLobbyScene(start);
       }
-    }
+    };
 
     // Meeting Event from Phaser
     const handleMeetingStarted = (data) => {
       console.log('Meeting started in App:', data);
       setMeetingData(data);
       setMeetingActive(true);
-      setTimeRemaining(60000); // Reset timer to 60 seconds
+      setTimeRemaining(data.durationMs ?? 30000); // the server decides the meeting length
     };
 
     const handleMeetingEnded = (data) => {
@@ -86,39 +106,45 @@ function App() {
     const handleGameEnd = (data) => {
       console.log('Game end event received in App:', data);
       setGameResult(data);
+      setMeetingActive(false);
+      setMeetingData(null);
       setCurrentPage(PAGES.GAMEEND);
     };
 
     const handleVote = (data) => {
-      console.log('Vote event received in App:', data, meetingData);
-      setMeetingData(prev => ({...prev, players: {...prev.players, [data.callerId]: {...prev.players[data.callerId], voted: true}}}));
+      setMeetingData(prev => {
+        if (!prev || !prev.players || !prev.players[data.callerId]) return prev;
+        return {...prev, players: {...prev.players, [data.callerId]: {...prev.players[data.callerId], voted: true}}};
+      });
     };
-    const handleNotif = (data) => {
-      if (window.showToast) {
-        window.showToast(data.message, 'info', 3000);
-      }
-    }
+    const handleNotif = (data) => toast(data.message, 'info', 3000);
+    const handleHost = (data) => setIsLocalPlayerHost(data.hostId === playerIdRef.current);
 
-    sockett.on('connect', handleConnect);
-    sockett.on('disconnect', handleDisconnect);
-    sockett.on('game:started', handleStartGame);
-    sockett.on('meeting:voted', handleVote);
-    sockett.on('game:notif', handleNotif);
+    net.on('connect', handleConnect);
+    net.on('disconnect', handleDisconnect);
+    net.on('game:started', handleStartGame);
+    net.on('meeting:voted', handleVote);
+    net.on('game:notif', handleNotif);
+    net.on('room:host', handleHost);
 
+    EventBus.on('current-scene-ready', handleSceneReady);
     EventBus.on('meeting:started', handleMeetingStarted);
     EventBus.on('meeting:ended', handleMeetingEnded);
     EventBus.on('game:ended', handleGameEnd);
 
+    net.ready.then(() => setIsConnected(net.connected));
+
     return () => {
-      sockett.off('connect', handleConnect);
-      sockett.off('disconnect', handleDisconnect);
-      sockett.off('game:started', handleStartGame);
-      sockett.off('meeting:voted', handleVote);
-      sockett.off('game:notif', handleNotif);
+      net.off('connect', handleConnect);
+      net.off('disconnect', handleDisconnect);
+      net.off('game:started', handleStartGame);
+      net.off('meeting:voted', handleVote);
+      net.off('game:notif', handleNotif);
+      net.off('room:host', handleHost);
+      EventBus.off('current-scene-ready', handleSceneReady);
       EventBus.off('meeting:started', handleMeetingStarted);
       EventBus.off('meeting:ended', handleMeetingEnded);
       EventBus.off('game:ended', handleGameEnd);
-      socketService.disconnect();
     };
   }, []);
 
@@ -133,17 +159,27 @@ function App() {
     setIsLocalPlayerHost(data.isHost);
   };
   const handleStartGameBtn = () => {
-    socket.emit('game:start', { roomId });
+    net.emit('game:start', {});
   }
   const handleBackToMenu = () => {
-    const playerId = sessionStorage.getItem('playerId');
-    if (socket && playerId) socket.emit('room:leave', {playerId});
+    // The IPC message reaches the main process before the reload, which then sends it to the server.
+    net.emit('room:leave', {});
     setRoomId(null);
     setCurrentPage(PAGES.MENU);
     window.location.reload();
   };
+  // After a game the server puts everybody back in the waiting room (scores are kept).
+  const handlePlayAgain = () => {
+    setGameResult(null);
+    setMeetingActive(false);
+    setMeetingData(null);
+    setIsLocalPlayerImposter(false);
+    LocalImposterRef.current = false;
+    setRoleIndicator(false);
+    setCurrentPage(PAGES.WAITING);
+  };
 
-  // Timer countdown for meeting
+  // Timer countdown for meeting (display only: the server owns the real timer)
   useEffect(() => {
     if (!meetingActive) return;
 
@@ -161,21 +197,23 @@ function App() {
   }, [meetingActive]);
 
   const handleVoteCallBack = (data) => {
-    data.roomId = roomId;
-    socket.emit('meeting:vote', data);
+    net.emit('meeting:vote', {votedForId: data.votedForId});
   }
 
-  const handleEndMeeting = () => {
-    if (!socket || !roomId) return;
-    console.log('Ending meeting');
-    socket.emit('meeting:end', {
-      roomId: roomId
-    });
-  };
+  if (!net.available) {
+    return (
+      <div id="app" style={{color: 'white', padding: 40, fontFamily: 'sans-serif', textAlign: 'center'}}>
+        <h1>Among Us Arena</h1>
+        <p>This page needs the desktop client, which owns the TCP / UDP socket.</p>
+        <p>Start the game with <code>npm run tcp</code> or <code>npm run udp</code>.</p>
+      </div>
+    );
+  }
 
   return (
     <div id="app">
       <ToastContainer />
+      <NetHud />
       {error && <p className={styles.error}>{error}</p>}
       {debug.current && <div className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
         {isConnected ? 'Connected' : 'Disconnected'}
@@ -192,6 +230,8 @@ function App() {
       {currentPage === PAGES.GAMEEND && (
         <EndGame
           result={gameResult}
+          localPlayerId={playerIdRef.current}
+          onPlayAgain={handlePlayAgain}
           onBackToMenu={handleBackToMenu}
           isLocalPlayerImposter={isLocalPlayerImposter}
         />
@@ -224,7 +264,6 @@ function App() {
               players={meetingData.players}
               currentPlayerId={playerIdRef.current}
               onVote={handleVoteCallBack}
-              onEndMeeting={handleEndMeeting}
               timeRemaining={timeRemaining}
             />
           )}

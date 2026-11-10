@@ -7,23 +7,28 @@ const voteIcon = '/assets/meeting/voted.png';
 const ivotedIcon = '/assets/meeting/ivoted.png';
 const cancelIcon = '/assets/meeting/cancel.png';
 const confirmIcon = '/assets/meeting/confirm.png';
-const localPlayerId = sessionStorage.getItem('playerId');
 // player: {id, name, voted, color}
-export default function MeetingTile({player, votes, VoteCallBack}) {
+export default function MeetingTile({player, votes, VoteCallBack, disabled = false}) {
   const [selected, setSelected] = useState(false);
   const [localPlayerVoted, setLocalPlayerVoted] = useState(false);
+  const locked = disabled || localPlayerVoted;
 
-  const handleConfirm = () => {
+  const handleConfirm = (e) => {
+    e.stopPropagation();
+    if (locked) return;
+    // Read it NOW: at module load (before registering) sessionStorage had no playerId yet.
+    const localPlayerId = sessionStorage.getItem('playerId');
     setSelected(false);
+    // callerId is informative only: the server takes the voter from our connection.
     VoteCallBack({callerId: localPlayerId, votedForId: player.id});
     setLocalPlayerVoted(true);
-
   }
-  const handleCancel = () => {
+  const handleCancel = (e) => {
+    e.stopPropagation();
     setSelected(false);
   }
   return <>
-  <div className={styles.tile} onClick={() => {!localPlayerVoted && setSelected(!selected)}}>
+  <div className={styles.tile} onClick={() => {!locked && setSelected(!selected)}}>
     <div className="flex flex-row">
     <div className={styles.playerIcon}>
       <img src={playerIcon} alt="Player Icon" className={styles.iconImage}/>

@@ -1,6 +1,6 @@
 import { BaseGameScene } from './BaseGameScene.js';
 import { GrayPipeline, VisionRadiusPipeline } from "../shaders/fragShader.js";
-import { socketService } from '../../services/socket.js';
+import net from '../../services/net.js';
 import { setPlayerColor } from "../utils/playerFactory.js";
 import {EventBus} from "../EventBus.js";
 import { handleImposter, handleImposterMovement } from "../utils/imposter.js";
@@ -76,7 +76,6 @@ export class Game extends BaseGameScene {
     create() {
         // stored promise for imposter role assignment
         const prom1 = this.createCommon();
-        this.socket = socketService.getSocket();
         this.input.on('pointerdown', (pointer) => {
             console.log(
                 'screen:', pointer.x, pointer.y,
@@ -135,28 +134,27 @@ export class Game extends BaseGameScene {
     }
 
     /**
-     * Clean up scene resources and event listeners
+     * Clean up network listeners. Runs once on the scene's 'shutdown' / 'destroy' events
+     * (registered in BaseGameScene.createCommon).
      */
-    shutdown() {
-        if (this.socket) {
-            if (this.onPlayerKilled) {
-                this.socket.off('player:killed', this.onPlayerKilled);
-                this.onPlayerKilled = null;
-            }
-            if (this.onMeetingStarted) {
-                this.socket.off('meeting:started', this.onMeetingStarted);
-                this.onMeetingStarted = null;
-            }
-            if (this.onMeetingEnded) {
-                this.socket.off('meeting:ended', this.onMeetingEnded);
-                this.onMeetingEnded = null;
-            }
-            if (this.onGameEnd) {
-                this.socket.off('game:end', this.onGameEnd);
-                this.onGameEnd = null;
-            }
+    cleanup() {
+        if (this.onPlayerKilled) {
+            net.off('player:killed', this.onPlayerKilled);
+            this.onPlayerKilled = null;
         }
-        super.shutdown();
+        if (this.onMeetingStarted) {
+            net.off('meeting:started', this.onMeetingStarted);
+            this.onMeetingStarted = null;
+        }
+        if (this.onMeetingEnded) {
+            net.off('meeting:ended', this.onMeetingEnded);
+            this.onMeetingEnded = null;
+        }
+        if (this.onGameEnd) {
+            net.off('game:ended', this.onGameEnd);   // was 'game:end' by mistake: the handler was never removed
+            this.onGameEnd = null;
+        }
+        super.cleanup();
     }
 
     // ANIMATION SETUP
@@ -179,11 +177,10 @@ export class Game extends BaseGameScene {
 
     // EVENT HANDLERS
     /**
-     * Register socket event handlers for multiplayer game events
+     * Register network handlers (services/net.js) for multiplayer game events
      */
     handleGameEvents() {
-        if (!this.socket) return;
-
+        // The server validated the kill (role, distance, cooldown) before broadcasting it.
         this.onPlayerKilled = (data) => {
             console.log("Player killed event received:", data);
 
@@ -193,18 +190,20 @@ export class Game extends BaseGameScene {
 
             const killedPlayer = (targetId === String(localId)) ? this.player : this.players[targetId];
 
-            // Move the killer sprite so all clients see imposter at the body
+            // Move the killer sprite onto the body, on every client (including the killer's own).
             const killerId = data.killerId ? String(data.killerId) : null;
             if (killerId) {
                 const killerSprite = (killerId === String(localId)) ? this.player : this.players[killerId];
                 if (killerSprite && killerSprite !== killedPlayer) {
-                    killerSprite.x = data.x;
-                    killerSprite.y = data.y;
+                    this.setSpritePosition(killerSprite, data.x, data.y);
                 }
             }
 
-            killedPlayer.alive = false;
-            if (killedPlayer.destroy) killedPlayer.destroy();
+            if (killedPlayer) {
+                killedPlayer.alive = false;
+                if (killedPlayer.destroy) killedPlayer.destroy();
+            }
+            // The body gets the VICTIM's color, sent by the server (data.color).
 
             const deathAnim = this.add.sprite(data.x, data.y, 'death', 'Dead0001.png')
                 .setScale(0.125)
@@ -224,12 +223,16 @@ export class Game extends BaseGameScene {
             this.meetingActive = true;
             this.physics.pause(); // Pause physics
             disableVisionSystem(this);
-            console.log("Meeting started, players teleported to spawn.", data, this.room.players);
+            // The server sends the ALIVE players (keyed by id) and the meeting length.
+            const players = Array.isArray(data.players)
+                ? Object.fromEntries(data.players.map(p => [p.id, p]))
+                : (data.players || {});
             // Recieved by react
             EventBus.emit('meeting:started', {
-                roomId: this.room.id,
+                roomId: this.room?.id,
                 callerId: data.callerId,
-                players: this.room.players
+                players,
+                durationMs: data.durationMs
             });
         };
 
@@ -239,6 +242,23 @@ export class Game extends BaseGameScene {
             this.physics.resume();
             enableVisionSystem(this);
             this.teleportPlayersToSpawn();
+
+            const ejectedId = data.results?.ejectedId;
+            if (ejectedId) {
+                const name = this.room?.players?.[ejectedId]?.name || 'A player';
+                if (ejectedId === this.playerObj?.id) {
+                    // We were voted out: we stay on the map as a ghost.
+                    if (this.player) {
+                        this.player.alive = false;
+                        this.player.setAlpha(0.4);
+                    }
+                } else {
+                    this.removePlayer(ejectedId);
+                }
+                window.showToast?.(`${name} was ejected`, 'info', 3000);
+            } else {
+                window.showToast?.('Nobody was ejected', 'info', 3000);
+            }
 
             // Recieved by react
             EventBus.emit('meeting:ended', {
@@ -253,24 +273,22 @@ export class Game extends BaseGameScene {
             }
         };
 
-        this.socket.on('player:killed', this.onPlayerKilled);
-        this.socket.on('meeting:started', this.onMeetingStarted);
-        this.socket.on('meeting:ended', this.onMeetingEnded);
-        this.socket.on('game:ended', this.onGameEnd);
+        net.on('player:killed', this.onPlayerKilled);
+        net.on('meeting:started', this.onMeetingStarted);
+        net.on('meeting:ended', this.onMeetingEnded);
+        net.on('game:ended', this.onGameEnd);
     }
 
     // MEETING MECHANICS
     /**
-     * Start a meeting (called when M key is pressed)
+     * Ask the server for an emergency meeting (meeting button)
      */
     startMeeting() {
-        if (!this.socket || !this.playerObj || !this.room) return;
+        if (!this.playerObj || !this.room) return;
 
         console.log('Starting meeting...');
-        this.socket.emit('meeting:start', {
-            roomId: this.room.id,
-            callerId: this.playerObj.id
-        });
+        // The server knows who calls it (our session) and checks the rules (alive, once per game...).
+        net.emit('meeting:start', {});
     }
 
     /**
@@ -278,19 +296,17 @@ export class Game extends BaseGameScene {
      */
     teleportPlayersToSpawn() {
         // Teleport local player
-        if (this.player && this.spawnPositions[this.playerObj.id]) {
+        if (this.player && this.player.active && this.spawnPositions[this.playerObj.id]) {
             const spawn = this.spawnPositions[this.playerObj.id];
-            this.player.x = spawn.x;
-            this.player.y = spawn.y;
+            this.setSpritePosition(this.player, spawn.x, spawn.y);
         }
 
-        // Teleport remote players
+        // Teleport remote players (setSpritePosition also moves their smoothing target)
         Object.keys(this.players).forEach(playerId => {
             const player = this.players[playerId];
-            if (player && this.spawnPositions[playerId] && player !== this.player) {
+            if (player && player.active && this.spawnPositions[playerId] && player !== this.player) {
                 const spawn = this.spawnPositions[playerId];
-                player.x = spawn.x;
-                player.y = spawn.y;
+                this.setSpritePosition(player, spawn.x, spawn.y);
             }
         });
     }

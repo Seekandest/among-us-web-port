@@ -28,7 +28,7 @@ export const PhaserGame = forwardRef(function PhaserGame({currentActiveScene}, r
 
   useEffect(() => {
 
-    EventBus.on('current-scene-ready', (currentScene) => {
+    const onSceneReady = (currentScene) => {
 
       if (currentActiveScene instanceof Function) {
         currentActiveScene(currentScene);
@@ -37,11 +37,12 @@ export const PhaserGame = forwardRef(function PhaserGame({currentActiveScene}, r
         ref.current.scene = currentScene;
       }
 
-    });
+    };
+    EventBus.on('current-scene-ready', onSceneReady);
 
     return () => {
-
-      EventBus.removeListener('current-scene-ready');
+      // Remove only OUR listener (App.jsx listens to this event too).
+      EventBus.removeListener('current-scene-ready', onSceneReady);
 
     }
 

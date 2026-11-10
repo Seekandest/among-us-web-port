@@ -1,19 +1,29 @@
 import styles from './EndGame.module.css';
 import Button from './Button';
 
-export default function EndGame({ result, onBackToMenu, isLocalPlayerImposter }) {
+/**
+ * End screen. `result` is the server's game:ended message:
+ *   {roomId, isImposter (true = the imposter won), imposterId, imposterName, ranking: [{id, name, color, points}]}
+ * Scores are kept in the room across games, so the ranking is the running total.
+ */
+export default function EndGame({ result, localPlayerId, onPlayAgain, onBackToMenu, isLocalPlayerImposter }) {
     const isImposterWin = result?.isImposter;
     // If local player is imposter, and imposter wins, it's a victory
     // If local player is crewmate, and imposter wins, it's a defeat
     const isVictory = isLocalPlayerImposter ? isImposterWin : !isImposterWin;
+    const ranking = result?.ranking || [];
 
     return (
         <div className={`${styles.endGameOverlay} ${isVictory ? styles.victory : styles.defeat}`}>
             <div className={styles.content}>
+                <h1 className={styles.title}>{isVictory ? 'Victory' : 'Defeat'}</h1>
                 <div className={styles.resultDetails}>
                     <p className={styles.winnerMessage}>
-                        {isImposterWin ? 'Imposters Won' : 'Crewmates Won'}
+                        {isImposterWin ? 'Imposter Won' : 'Crewmates Won'}
                     </p>
+                    {result?.imposterName && (
+                        <p className={styles.imposterReveal}>The imposter was {result.imposterName}</p>
+                    )}
                 </div>
 
                 <div className={styles.characterContainer}>
@@ -29,9 +39,32 @@ export default function EndGame({ result, onBackToMenu, isLocalPlayerImposter })
                      </div>
                 </div>
 
-                <Button onClick={onBackToMenu} className={styles.menuBtn}>
-                    Return to Menu
-                </Button>
+                {ranking.length > 0 && (
+                    <table className={styles.ranking}>
+                        <thead>
+                            <tr><th>#</th><th></th><th>Player</th><th>Points</th></tr>
+                        </thead>
+                        <tbody>
+                            {ranking.map((p, i) => (
+                                <tr key={p.id} className={p.id === localPlayerId ? styles.me : undefined}>
+                                    <td>{i + 1}</td>
+                                    <td><span className={styles.colorDot} style={{backgroundColor: p.color}}/></td>
+                                    <td>{p.name}{p.id === result.imposterId ? ' (imposter)' : ''}</td>
+                                    <td>{p.points}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+
+                <div className={styles.buttons}>
+                    <Button onClick={onPlayAgain} className={styles.menuBtn}>
+                        Play again
+                    </Button>
+                    <Button onClick={onBackToMenu} className={styles.menuBtn}>
+                        Leave
+                    </Button>
+                </div>
             </div>
         </div>
     );

@@ -1,8 +1,14 @@
 import { Scene } from 'phaser';
-import { socketService } from '../../services/socket.js';
-import { apiUrl } from '../../utils/urls.js';
+import net from '../../services/net.js';
 import { EventBus } from '../EventBus';
 import { createPlayer } from '../utils/playerFactory.js';
+
+// How often we send our position (see handleMovement):
+const MOVE_SEND_INTERVAL_MS = 50;    // 20 per second while moving
+const IDLE_SEND_INTERVAL_MS = 500;   // 2 per second while standing still (keeps the server's copy fresh)
+// Smoothing of the OTHER players' sprites between two position updates:
+const SMOOTHING = 0.3;               // each frame, move 30% of the remaining distance to the target
+const SNAP_DISTANCE = 200;           // further than this: jump directly (teleport, spawn...)
 
 /**
  * Base class for shared logic of player management, movement, and socket events
@@ -136,6 +142,9 @@ export class BaseGameScene extends Scene {
         });
         newPlayer.id = playerData.id;
         newPlayer.alive = true;
+        // Where the network says this player is; the sprite glides there (smoothRemotePlayers).
+        newPlayer.targetX = playerData.x;
+        newPlayer.targetY = playerData.y;
 
         // Scale up sprites for lobby scene to match smaller map size
         if (this.scene.key === 'WaitingLobby') {
@@ -166,21 +175,50 @@ export class BaseGameScene extends Scene {
     }
 
     /**
-     * Fetch room data and setup players
+     * Move a sprite instantly (teleport) AND make it its new smoothing target,
+     * otherwise smoothRemotePlayers would slide it back to the old target.
+     */
+    setSpritePosition(sprite, x, y) {
+        if (!sprite) return;
+        if (sprite.body) sprite.body.reset(x, y);
+        sprite.x = x;
+        sprite.y = y;
+        sprite.targetX = x;
+        sprite.targetY = y;
+    }
+
+    /**
+     * Positions arrive ~20 times per second (and in UDP some are lost), but the screen draws
+     * 60 frames per second. Instead of jumping on each update, remote sprites glide toward the
+     * last position received.
+     */
+    smoothRemotePlayers() {
+        if (!this.players) return;
+        for (const sprite of Object.values(this.players)) {
+            if (sprite === this.player || !sprite.active || sprite.targetX === undefined) continue;
+            const dx = sprite.targetX - sprite.x;
+            const dy = sprite.targetY - sprite.y;
+            if (Math.abs(dx) > SNAP_DISTANCE || Math.abs(dy) > SNAP_DISTANCE) {
+                sprite.x = sprite.targetX;
+                sprite.y = sprite.targetY;
+            } else {
+                sprite.x += dx * SMOOTHING;
+                sprite.y += dy * SMOOTHING;
+            }
+        }
+    }
+
+    /**
+     * Ask the server for the room and set up the players (replaces the old HTTP GET /player/room/:id).
      */
     async fetchAndSetupPlayers() {
-        const playerId = sessionStorage.getItem("playerId");
-        const socket = socketService.getSocket();
-
-        console.log("Fetching room data for playerId:", playerId, "socket id:", socket?.id);
-
-        const response = await fetch(apiUrl(`/player/room/${playerId}`));
-        if (!response.ok) {
-            const errBody = await response.text().catch(() => '');
-            console.error("Failed to fetch player room:", response.status, errBody);
+        let data;
+        try {
+            data = await net.request('room:get', {}, 'room:state');
+        } catch (err) {
+            console.error("Could not get the room from the server:", err);
             return;
         }
-        const data = await response.json();
 
         console.log("room joined data:", data);
 
@@ -221,19 +259,11 @@ export class BaseGameScene extends Scene {
     }
 
     /**
-     * Setup socket event listeners for player events
+     * Listen to the server's player events (through services/net.js)
      */
-    setupSocketListeners() {
-        const socket = socketService.getSocket();
-        if (!socket) return;
-
+    setupNetListeners() {
         // Prevent registering the same handlers multiple times
-        if (this._socketListenersAdded) {
-            this.socket = socket;
-            return;
-        }
-
-        this.socket = socket;
+        if (this._netListenersAdded) return;
 
         // named handlers so they can be removed later
         this._onPlayerJoined = (data) => {
@@ -252,55 +282,64 @@ export class BaseGameScene extends Scene {
             this.removePlayer(data.playerId);
         };
 
+        // Another player's position (the server never sends us our own).
         this._onPlayerMoved = (data) => {
+            if (!this.players || data.id === this.playerObj?.id) return;
             const player = this.players[data.id];
-            if (!player || !player.alive) return;
+            if (!player || !player.alive || !player.active) return;
 
-            if (data.id !== this.playerObj?.id) {
-                player.x = data.x;
-                player.y = data.y;
-            }
+            // Don't jump there: store it as the target, smoothRemotePlayers() glides toward it.
+            player.targetX = data.x;
+            player.targetY = data.y;
 
             if (data.d) player.flipX = data.d === 'left';
 
             if (!player.anims) return;
             if (data.moving) {
                 if (!player.anims.isPlaying) player.anims.play('walk');
-            } else {
+            } else if (player.anims.isPlaying) {
                 player.anims.stop();
                 player.setTexture('idleImage');
             }
         };
 
-        socket.on('player:joined', this._onPlayerJoined);
-        socket.on('player:left', this._onPlayerLeft);
-        socket.on('player:moved', this._onPlayerMoved);
+        net.on('player:joined', this._onPlayerJoined);
+        net.on('player:left', this._onPlayerLeft);
+        net.on('player:moved', this._onPlayerMoved);
 
-        this._socketListenersAdded = true;
+        this._netListenersAdded = true;
     }
 
     /**
-     * Cleanup socket listeners
+     * Remove our network listeners
      */
-    cleanupSocketListeners() {
-        if (this.socket && this._socketListenersAdded) {
-            // Remove only the handlers we added
-            if (this._onPlayerJoined) this.socket.off('player:joined', this._onPlayerJoined);
-            if (this._onPlayerLeft) this.socket.off('player:left', this._onPlayerLeft);
-            if (this._onPlayerMoved) this.socket.off('player:moved', this._onPlayerMoved);
+    cleanupNetListeners() {
+        if (!this._netListenersAdded) return;
+        // Remove only the handlers we added
+        if (this._onPlayerJoined) net.off('player:joined', this._onPlayerJoined);
+        if (this._onPlayerLeft) net.off('player:left', this._onPlayerLeft);
+        if (this._onPlayerMoved) net.off('player:moved', this._onPlayerMoved);
 
-            // clear refs
-            this._onPlayerJoined = null;
-            this._onPlayerLeft = null;
-            this._onPlayerMoved = null;
-            this._socketListenersAdded = false;
-        }
+        // clear refs
+        this._onPlayerJoined = null;
+        this._onPlayerLeft = null;
+        this._onPlayerMoved = null;
+        this._netListenersAdded = false;
     }
 
     /**
      * Common create logic for all game scenes
      */
     async createCommon() {
+        // Phaser never calls a shutdown() method by itself: it emits 'shutdown' (scene stopped or
+        // replaced) and 'destroy' (game destroyed). Without this, our network listeners would stay
+        // registered and keep updating sprites of a dead scene.
+        this._cleanedUp = false;
+        this.lastMoveSentAt = undefined;
+        this.wasMoving = false;
+        this.events.once('shutdown', () => this.cleanup());
+        this.events.once('destroy', () => this.cleanup());
+
         this.ui = this.add.container(0, 0).setScrollFactor(0).setDepth(1000);
         this.worldContainer = this.add.container(0, 0).setDepth(0);
         this.players = {};
@@ -316,7 +355,7 @@ export class BaseGameScene extends Scene {
         this.createWalkAnimation();
         this.setupMap();
         this.setupInput();
-        this.setupSocketListeners();
+        this.setupNetListeners();
         await this.fetchAndSetupPlayers();
         console.log("Finished Setting Up Players: ", this.player);
         EventBus.emit('current-scene-ready', this);
@@ -326,6 +365,7 @@ export class BaseGameScene extends Scene {
      * Handle player movement (call in update)
      */
     handleMovement() {
+        this.smoothRemotePlayers();
         if (!this.player || !this.player.body) return;
 
         // Disable movement during meeting
@@ -335,6 +375,7 @@ export class BaseGameScene extends Scene {
                 this.player.anims.stop();
                 this.player.setTexture('idleImage');
             }
+            if (this.wasMoving) this.sendPosition(false); // tell the others we stopped
             return;
         }
 
@@ -376,25 +417,41 @@ export class BaseGameScene extends Scene {
             }
         }
 
-        // Send movement to server
-        if (isMoving || this.wasMoving) {
-            this.time.delayedCall(0, () => {
-                if (!this.player || !this.socket) return;
-                this.socket.emit('player:move', {
-                    id: this.playerObj.id,
-                    x: this.player.x,
-                    y: this.player.y,
-                    roomId: this.room.id,
-                    d: this.playerObj.state.d,
-                    moving: isMoving
-                });
-            });
-        }
+        // Send our position to the server, at a controlled rate instead of every frame (60/s):
+        //   - immediately when we start or stop moving (so the others see it at once),
+        //   - every 50 ms (20/s) while moving,
+        //   - every 500 ms while standing still (the server uses our position for kill range).
+        // In the UDP version these are unreliable FAST datagrams: a lost one is simply replaced
+        // by the next one 50 ms later.
+        const startedOrStopped = isMoving !== this.wasMoving;
+        const interval = isMoving ? MOVE_SEND_INTERVAL_MS : IDLE_SEND_INTERVAL_MS;
+        const due = this.lastMoveSentAt === undefined || this.time.now - this.lastMoveSentAt >= interval;
+        if (startedOrStopped || due) this.sendPosition(isMoving);
+    }
+
+    /**
+     * One player:move message. No id / roomId inside: the server knows who we are from our
+     * connection (TCP socket / UDP address), and refuses to let us move someone else.
+     */
+    sendPosition(isMoving) {
+        if (!this.room || !this.player || !this.playerObj) return;
+        net.emit('player:move', {
+            x: Math.round(this.player.x),
+            y: Math.round(this.player.y),
+            d: this.playerObj.state.d,
+            moving: isMoving
+        });
+        this.lastMoveSentAt = this.time.now;
         this.wasMoving = isMoving;
     }
 
-
-    shutdown() {
-        this.cleanupSocketListeners();
+    /**
+     * Idempotent cleanup, run on the scene's 'shutdown' and 'destroy' events.
+     * Subclasses extend it (and call super.cleanup()).
+     */
+    cleanup() {
+        if (this._cleanedUp) return;
+        this._cleanedUp = true;
+        this.cleanupNetListeners();
     }
 }

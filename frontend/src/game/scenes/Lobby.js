@@ -1,6 +1,4 @@
 import {BaseGameScene} from './BaseGameScene.js';
-import {socketService} from '../../services/socket.js';
-import { apiUrl } from '../../utils/urls.js';
 import {EventBus} from '../EventBus.js';
 
 /**
@@ -16,20 +14,15 @@ export class WaitingLobby extends BaseGameScene {
         console.log("Lobby Scene started with ", data)
     }
     /**
-     * Handle start game event from React
+     * Handle start game event from React (after the server's private game:started message)
      */
     handleStartGame(data) {
         console.log('handleStartGame called with data:', data, this.scene);
         if (this.scene && this.scene.isActive('WaitingLobby')) {
             console.log('Starting game with data:', data);
-            // TODO fetch only when sure that imposter is set
-            data.isImposter = fetch(apiUrl(`/isImposter/?roomId=${data.roomId}&playerId=${data.playerId}`))
-                .then(res => res.json())
-                .then(json => json.isImposter)
-                .catch(err => {
-                    console.error('Error checking imposter status:', err);
-                    return false;
-                });
+            // The role came in our own game:started message as a plain boolean (no HTTP request).
+            // Game.js still expects a Promise, so wrap it.
+            data.isImposter = Promise.resolve(data.isImposter);
             this.scene.start('Game', data);
         }
     }
@@ -57,18 +50,13 @@ export class WaitingLobby extends BaseGameScene {
         EventBus.removeAllListeners('start-game');
         // Listen for game start event from React
         EventBus.on('start-game', this.handleStartGame, this);
-
-
     }
     update(time, delta) {
         this.handleMovement();
     }
-    shutdown() {
-        super.shutdown();
+    /** Called once on 'shutdown' / 'destroy' (registered in BaseGameScene.createCommon). */
+    cleanup() {
+        super.cleanup();
         EventBus.off('start-game', this.handleStartGame, this);
-        const socket = socketService.getSocket();
-        if (socket) {
-            socket.off('game:start');
-        }
     }
 }

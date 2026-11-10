@@ -102,6 +102,59 @@
     animation: fadeIn 0.5s ease-out 1.5s forwards;
 }
 
+.imposterReveal {
+    color: rgba(255, 255, 255, 0.85);
+    font-family: Arial, sans-serif;
+    margin: 6px 0 0;
+}
+
+.ranking {
+    border-collapse: collapse;
+    min-width: 320px;
+    color: white;
+    font-family: Arial, sans-serif;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 8px;
+    overflow: hidden;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out 1.2s forwards;
+}
+
+.ranking th, .ranking td {
+    padding: 8px 14px;
+    text-align: left;
+}
+
+.ranking th {
+    background: rgba(0, 0, 0, 0.35);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.ranking td:last-child, .ranking th:last-child {
+    text-align: right;
+}
+
+.ranking .me {
+    background: rgba(255, 215, 0, 0.25);
+    font-weight: bold;
+}
+
+.colorDot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 0, 0, 0.5);
+    vertical-align: middle;
+}
+
+.buttons {
+    display: flex;
+    gap: 16px;
+}
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }

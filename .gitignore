@@ -143,3 +143,6 @@ vite.config.ts.timestamp-*
 .idea/
 .output.txt
 
+
+# client network statistics (electron/main.cjs)
+netstats-*.csv

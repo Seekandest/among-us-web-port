@@ -1,4 +1,4 @@
-import { EventBus } from "../EventBus.js";
+import net from "../../services/net.js";
 
 /**
  * Initialize imposter-specific UI and mechanics
@@ -17,20 +17,12 @@ export function handleImposter(scene) {
         const victim = scene.closest && scene.closest.player;
         if (!victim) return;
 
-        // Send kill event to server with victim and killer data
-        const payload = {
-            playerId: victim.id,           // victim id
-            killerId: scene.playerObj?.id,  // killer id
-            roomId: scene.playerObj.roomId,
-            x: victim.x,
-            y: victim.y,
-            color: scene.playerObj.color
-        };
-        console.log('Emitting player:kill', payload);
-        scene.socket.emit('player:kill', payload);
-
-        scene.player.x = victim.x;
-        scene.player.y = victim.y;
+        // Only a REQUEST: "I want to kill this player". The server knows the killer from our
+        // connection, and checks role, distance (with its own positions) and cooldown. If it agrees,
+        // everybody gets player:killed (and we jump onto the body then); if not, we get a
+        // game:notif refusal, shown as a toast by App.jsx.
+        console.log('Emitting player:kill', victim.id);
+        net.emit('player:kill', { playerId: victim.id });
 
         // Reset closest player tracking
         scene.closest = { player: null, distance: KILL_ZONE_RADIUS };
@@ -80,6 +72,11 @@ export function handleNearestPlayer(scene) {
     const KILL_ZONE_RADIUS = 60; // pixels
 
     Object.values(scene.players).forEach(p => {
+        // Dead or removed players are not targets (the server would refuse the kill anyway).
+        if (!p.alive || !p.active) {
+            if (p === scene.closest.player) scene.closest = { player: null, distance: KILL_ZONE_RADIUS };
+            return;
+        }
         const dist = Phaser.Math.Distance.Between(scene.zone.x, scene.zone.y, p.x, p.y);
 
         // Player moved out of range
