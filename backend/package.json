@@ -1,21 +1,15 @@
 {
     "name": "backend",
     "version": "1.0.0",
-    "description": "",
-    "main": "index.js",
+    "description": "Among Us Arena game server: TCP version (net) and UDP version (dgram), no networking libraries",
+    "main": "src/main.js",
     "scripts": {
-        "start": "node src/server.js",
-        "dev": "node --watch src/server.js",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "tcp": "node src/main.js --proto tcp --port 5000",
+        "udp": "node src/main.js --proto udp --port 5001"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "type": "module",
-    "dependencies": {
-        "cors": "^2.8.6",
-        "dotenv": "^17.2.3",
-        "express": "^5.2.1",
-        "socket.io": "^4.8.3"
-    }
+    "dependencies": {}
 }

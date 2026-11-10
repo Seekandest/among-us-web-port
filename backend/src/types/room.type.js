@@ -31,7 +31,12 @@
  *   imposter: (string|null),
  *   host: Player,
  *   players: {[key: string]: Player},
- *   currentMeeting: MeetingState | null
+ *   currentMeeting: MeetingState | null,
+ *   scores: {[playerId: string]: number},
+ *   imposterHistory: string[],
+ *   lastKillAt: number,
+ *   emergencyUsed: {[playerId: string]: boolean},
+ *   gameNumber: number
  * }} GameRoom
  */
 

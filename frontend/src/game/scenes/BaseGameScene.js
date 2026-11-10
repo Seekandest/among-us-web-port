@@ -118,8 +118,8 @@ export class BaseGameScene extends Scene {
      */
     setupInput() {
         // TODO review input handling
-        this.wKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-        this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+        this.zKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
+        this.qKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
         this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
         this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
         this.mKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
@@ -345,9 +345,9 @@ export class BaseGameScene extends Scene {
         let vx = 0;
         let vy = 0;
 
-        if (this.wKey.isDown) { vy = -speed; }
+        if (this.zKey.isDown) { vy = -speed; }
         if (this.sKey.isDown) { vy = speed; }
-        if (this.aKey.isDown) { vx = -speed; this.playerObj.state.d = 'left'; }
+        if (this.qKey.isDown) { vx = -speed; this.playerObj.state.d = 'left'; }
         if (this.dKey.isDown) { vx = speed; this.playerObj.state.d = 'right'; }
 
         // Normalize diagonal movement
