@@ -282,9 +282,14 @@ export class BaseGameScene extends Scene {
             this.removePlayer(data.playerId);
         };
 
-        // Another player's position (the server never sends us our own).
+        // Another player's position. Our own position comes back only when the server
+        // rejected a move (too fast, or outside the map): snap to the position it kept.
         this._onPlayerMoved = (data) => {
-            if (!this.players || data.id === this.playerObj?.id) return;
+            if (data.id === this.playerObj?.id) {
+                if (data.corrected && this.player) this.setSpritePosition(this.player, data.x, data.y);
+                return;
+            }
+            if (!this.players) return;
             const player = this.players[data.id];
             if (!player || !player.alive || !player.active) return;
 

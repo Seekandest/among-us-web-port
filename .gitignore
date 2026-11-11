@@ -146,3 +146,6 @@ vite.config.ts.timestamp-*
 
 # client network statistics (electron/main.cjs)
 netstats-*.csv
+
+# account password hashes (created by the server on first login)
+backend/data/

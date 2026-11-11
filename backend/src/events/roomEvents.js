@@ -9,10 +9,13 @@
 
 import { RoomsManager, publicRoom } from '../managers/rooms.manager.js';
 import { PlayersManager } from '../managers/players.manager.js';
+import { Accounts } from '../managers/accounts.manager.js';
 import { afterPlayerLeftGame } from './gameEvents.js';
 
 const MAX_PLAYERS_PER_ROOM = 10;
 const MAX_NAME_LENGTH = 16;
+const MIN_PASSWORD_LENGTH = 4;
+const MAX_PASSWORD_LENGTH = 64;
 const ROOM_ID_PATTERN = /^[A-Za-z0-9]{1,12}$/;
 
 // Same list as the client (frontend/src/pages/Menu.jsx).
@@ -90,15 +93,28 @@ export function handleSessionGone(ctx, sessionId, reason) {
 // Handlers
 // ---------------------------------------------------------------------------------------------
 
-/** player:register {id, name, color} - binds this session to a player id. */
+/**
+ * player:register {name, password, color}
+ * The client does NOT choose the player id. A new name creates an account and the server
+ * issues the id. The same name later is a login: the password must match, or it is refused.
+ * Any "id" field in the payload is ignored.
+ */
 function playerRegister(ctx, sessionId, data) {
-    const id = typeof data.id === 'string' ? data.id.trim() : '';
     const name = typeof data.name === 'string' ? data.name.trim().slice(0, MAX_NAME_LENGTH) : '';
-    if (!id || id.length > 64 || !name) {
-        return ctx.sendTo(sessionId, 'player:register:error', { message: 'Invalid id or name' });
+    const password = typeof data.password === 'string' ? data.password : '';
+    if (!name || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+        return ctx.sendTo(sessionId, 'player:register:error', {
+            message: `Name and a password of at least ${MIN_PASSWORD_LENGTH} characters are required`,
+        });
     }
 
-    // Refuse an id that another LIVE session already owns (two windows with the same id).
+    const account = Accounts.loginOrRegister(name, password);
+    if (!account.ok) {
+        return ctx.sendTo(sessionId, 'player:register:error', { message: account.message });
+    }
+    const id = account.id;
+
+    // This account is already in use on another live connection (two windows, same name).
     // If the old connection is dead but not yet detected, this clears up within the 5 s timeout.
     const owner = ctx.sessionOf(id);
     if (owner && owner !== sessionId && ctx.isConnected(owner)) {
@@ -115,15 +131,18 @@ function playerRegister(ctx, sessionId, data) {
         ctx.unbind(sessionId);
     }
 
-    const color = PLAYER_COLORS.includes(data.color) ? data.color : PLAYER_COLORS[0];
-    PlayersManager.createPlayer(id, name, color);
+    const existing = PlayersManager.getPlayer(id);
+    const color = PLAYER_COLORS.includes(data.color)
+        ? data.color
+        : (existing?.color || PLAYER_COLORS[0]);
+    PlayersManager.createPlayer(id, account.name, color);
     // Registering again means the client is back at the menu: it is no longer in a room.
     const player = PlayersManager.getPlayer(id);
     if (player.roomId) removeFromRoom(ctx, player, 'returned to the menu');
 
     ctx.bind(sessionId, id);
-    console.log(`[room] ${sessionId} registered as "${name}" (${id})`);
-    ctx.sendTo(sessionId, 'player:registered', { playerId: id, name, color });
+    console.log(`[room] ${sessionId} registered as "${account.name}" (${id})`);
+    ctx.sendTo(sessionId, 'player:registered', { playerId: id, name: account.name, color: player.color });
     sendRoomsList(ctx, sessionId);
 }
 

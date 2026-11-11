@@ -37,7 +37,8 @@ The game exists in **two versions with identical rules and features**. Only the 
 
 ## 1. The game
 
-1. Each player enters a name (and optionally a color) and registers.
+1. Each player enters a name, a password, and optionally a color. A new name creates an account.
+   The same name later is a login: a wrong password is refused. The server assigns the player id.
 2. One player creates a room; the others see it appear in their room list and join it.
 3. The host starts the game. Each player privately learns whether they are the imposter.
 4. The imposter kills crewmates (10 s cooldown, must be close). Any living player can call an emergency
@@ -112,8 +113,11 @@ happened. Refusals come back privately as `game:notif`.
 - TCP: one session = one accepted TCP connection (one socket per client), ids `tcp-1`, `tcp-2`...
 - UDP: one session = one remote `ip:port` that completed the `HELLO` → `WELCOME` handshake, ids `udp-1`...
 
-When a player registers, the server binds their player id to their session. Later messages carry no
-player id: a client cannot act on behalf of someone else.
+When a player registers or logs in, the server checks the password (stored as a scrypt hash in
+`backend/data/users.json`) and binds that account's player id to their session. The client does not
+choose the id. Later messages carry no player id: a client cannot act on behalf of someone else.
+Movement is checked on the server: a position outside the map, or faster than the client is allowed
+to walk (350 px/s in the lobby, 100 px/s in a game), is dropped.
 
 **Wire format: readable JSON**, so every message can be read directly in Wireshark:
 ```json
@@ -298,7 +302,7 @@ Client → server (the player is always identified from the session, never from 
 
 | Message | Payload | Reply |
 |---|---|---|
-| `player:register` | `{id, name, color}` | `player:registered` + `rooms:list`, or `player:register:error {message}` |
+| `player:register` | `{name, password, color}` | `player:registered {playerId, name, color}` + `rooms:list`, or `player:register:error {message}` (`Wrong password` if the account exists and the password does not match). Any `id` in the payload is ignored. |
 | `player:unregister` | `{}` | `player:unregistered` |
 | `rooms:get` | `{}` | `rooms:list {rooms}` |
 | `room:create` | `{roomId}` | `room:joined`, or `room:join:error {message}` |
@@ -306,7 +310,7 @@ Client → server (the player is always identified from the session, never from 
 | `room:leave` | `{}` | others get `player:left` |
 | `room:get` | `{}` | `room:state {room, player}` |
 | `game:start` | `{}` (host only) | each player privately gets `game:started {roomId, isImposter}` |
-| `player:move` | `{x, y, d, moving}` | others get `player:moved {id, x, y, d, moving}` |
+| `player:move` | `{x, y, d, moving}` | accepted moves: others get `player:moved {id, x, y, d, moving}`. Rejected moves (outside the map, or faster than max speed): the sender alone gets `player:moved` with `corrected: true` and the server's position |
 | `player:kill` | `{playerId}` (victim) | everyone gets `player:killed {playerId, killerId, x, y, color}`, or `game:notif` |
 | `meeting:start` | `{}` | everyone gets `meeting:started {callerId, durationMs, players}` |
 | `meeting:vote` | `{votedForId}` or `'skip'` | everyone gets `meeting:voted {callerId}` (choice hidden), then `meeting:ended {results}` |

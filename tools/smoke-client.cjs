@@ -21,6 +21,8 @@ const path = require('node:path');
 const net = require('node:net');
 const dgram = require('node:dgram');
 const { spawn, fork } = require('node:child_process');
+const os = require('node:os');
+const fs = require('node:fs');
 
 const ROOT = path.join(__dirname, '..');
 const { createTcpClient } = require(path.join(ROOT, 'frontend/electron/tcpClient.cjs'));
@@ -134,9 +136,11 @@ function makeChildClient(name) {
 }
 
 function startServer() {
+    const accountsFile = path.join(os.tmpdir(), `among-us-accounts-${PORT}.json`);
+    try { fs.unlinkSync(accountsFile); } catch { /* none yet */ }
     const child = spawn(process.execPath,
         [path.join(ROOT, 'backend/src/main.js'), '--proto', PROTO, '--port', String(PORT), '--loss', String(LOSS)],
-        { stdio: ['ignore', 'pipe', 'pipe'] });
+        { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ACCOUNTS_FILE: accountsFile } });
     let output = '';
     child.stdout.on('data', d => { output += d; });
     child.stderr.on('data', d => { output += d; });
@@ -190,6 +194,41 @@ function startRelay() {
     });
 }
 
+// Walk one step at a time. A single jump would be rejected: the server allows
+// about 100 px/s in a game (115 px/s with tolerance), and these steps are 4 px.
+function stepToward(c, x, y) {
+    const dx = x - c.pos.x;
+    const dy = y - c.pos.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= 4) {
+        c.pos.x = x;
+        c.pos.y = y;
+        return true;
+    }
+    const nx = Math.round(c.pos.x + (dx / dist) * 4);
+    const ny = Math.round(c.pos.y + (dy / dist) * 4);
+    if (Math.hypot(x - nx, y - ny) >= dist) {
+        c.pos.x = x;
+        c.pos.y = y;
+        return true;
+    }
+    c.pos.x = nx;
+    c.pos.y = ny;
+    c.pos.d = dx < 0 ? 'left' : 'right';
+    return false;
+}
+
+async function walkTo(c, x, y) {
+    c.pos.moving = true;
+    let guard = 0;
+    while (!stepToward(c, x, y)) {
+        if (++guard > 500) throw new Error(`${c.name} did not reach ${x},${y}`);
+        await sleep(60);
+    }
+    c.pos.moving = false;
+    await sleep(150);
+}
+
 // Every client sends its position at 20 Hz, like the real game while moving.
 function startMovers(clients) {
     const timer = setInterval(() => {
@@ -236,16 +275,23 @@ function startMovers(clients) {
         let e = await alice.expect('room:join:error', () => alice.send('room:create', { roomId: 'SMOKE1' }));
         ok(e.message === 'Register first', 'create before register refused');
 
-        const ids = { Alice: 'id-alice', Bob: 'id-bob', Dana: 'id-dana' };
+        const passwords = { Alice: 'alice-pass', Bob: 'bob-pass', Dana: 'dana-pass', Eve: 'eve-pass' };
+        const register = (c, color) => c.expect('player:registered', () => c.send('player:register', {
+            id: 'client-picked', name: c.name, password: passwords[c.name], color,
+        }));
         for (const [c, color] of [[alice, '#c51111'], [bob, '#c51111'], [dana, '#132ed1']]) {
-            const r = await c.expect('player:registered', () => c.send('player:register', { id: ids[c.name], name: c.name, color }));
-            ok(r.playerId === ids[c.name], `${c.name} registered`);
-            c.id = ids[c.name];
+            const r = await register(c, color);
+            ok(typeof r.playerId === 'string' && r.playerId.startsWith('p-') && r.playerId !== 'client-picked',
+                `${c.name} got a server-issued id`, r.playerId);
+            c.id = r.playerId;
             c.color = color;
         }
-        e = await bob.expect('player:register:error', () => bob.send('player:register', { id: 'id-alice', name: 'Thief', color: '#c51111' }));
-        ok(/already connected/.test(e.message), 'registering an id owned by another live client refused');
-        await bob.expect('player:registered', () => bob.send('player:register', { id: 'id-bob', name: 'Bob', color: '#c51111' }));
+        e = await bob.expect('player:register:error', () => bob.send('player:register', { name: 'Alice', password: 'wrong-pass', color: '#c51111' }));
+        ok(e.message === 'Wrong password', 'wrong password refused');
+        e = await bob.expect('player:register:error', () => bob.send('player:register', { name: 'Alice', password: passwords.Alice, color: '#c51111' }));
+        ok(/already connected/.test(e.message), 'logging in as an already connected player refused');
+        const bobAgain = await bob.expect('player:registered', () => bob.send('player:register', { name: 'Bob', password: passwords.Bob, color: '#c51111' }));
+        ok(bobAgain.playerId === bob.id, 'right password logs Bob back in with the same server id');
 
         const joinedA = await alice.expect('room:joined', () => alice.send('room:create', { roomId: 'SMOKE1' }));
         ok(joinedA.room.host.id === alice.id, 'Alice created SMOKE1 and is host');
@@ -276,23 +322,29 @@ function startMovers(clients) {
         log(`   imposter = ${imp.name}, crew = ${crewA.name}, ${crewB.name}`);
         stopMovers = startMovers(players);
 
-        crewA.pos = { x: 600, y: 160, d: 'right', moving: true };
-        const mv = await crewB.wait('player:moved', { where: d => d.id === crewA.id && d.x === 600 });
-        ok(mv.y === 160 && mv.d === 'right', 'positions relayed to the other players at 20 Hz');
-        crewA.pos = { x: 600, y: 160, d: 'right', moving: false };
+        await walkTo(crewA, 600, 160);
+        const mv = await crewB.wait('player:moved', { where: d => d.id === crewA.id && d.x === 600, timeout: 4000 });
+        ok(mv.y === 160, 'positions relayed to the other players at 20 Hz');
+
+        crewB.inbox = crewB.inbox.filter(m => m.type !== 'player:moved');
+        crewA.send('player:move', { x: 99999, y: 160, d: 'right', moving: false });
+        crewA.send('player:move', { x: crewA.pos.x + 80, y: crewA.pos.y, d: 'right', moving: true });
+        await sleep(400);
+        const leaked = crewB.inbox.filter(m => m.type === 'player:moved' && m.data.id === crewA.id
+            && (m.data.x === 99999 || m.data.x === crewA.pos.x + 80));
+        ok(leaked.length === 0, 'server dropped a move outside the map and a move faster than max speed');
 
         e = await imp.expect('game:notif', () => imp.send('player:kill', { playerId: crewA.id }));
         ok(/cooldown/.test(e.message), 'kill refused during the 10 s cooldown', e.message);
         e = await crewA.expect('game:notif', () => crewA.send('player:kill', { playerId: crewB.id }));
         ok(/imposter/.test(e.message), 'a crewmate cannot kill', e.message);
 
-        imp.pos = { x: 950, y: 160, d: 'right', moving: false };   // far from everyone
+        await walkTo(imp, 950, 160);   // far from everyone, one legal step at a time
         await sleep(Math.max(0, 10_300 - (Date.now() - startedAt)));
         e = await imp.expect('game:notif', () => imp.send('player:kill', { playerId: crewA.id }));
         ok(/far/.test(e.message), 'kill refused out of range (server uses ITS positions)', e.message);
 
-        imp.pos = { x: 610, y: 165, d: 'left', moving: false };     // next to crewA
-        await sleep(400);
+        await walkTo(imp, 610, 165);     // next to crewA
         const killed = await crewB.expect('player:killed', () => imp.send('player:kill', { playerId: crewA.id }));
         ok(killed.playerId === crewA.id && killed.killerId === imp.id, 'kill accepted in range, broadcast to all');
         ok(killed.color === crewA.color, 'body has the victim\'s color', killed.color);
@@ -357,10 +409,11 @@ function startMovers(clients) {
         const eve = makeClient('Eve', relay.port);
         all.push(eve);
         const se = await eve.waitStatus('connected', { timeout: CONNECT_TIMEOUT });
-        await eve.expect('player:registered', () => eve.send('player:register', { id: 'id-eve', name: 'Eve', color: '#117f2d' }));
+        const eveReg = await eve.expect('player:registered', () => eve.send('player:register', { name: 'Eve', password: passwords.Eve, color: '#117f2d' }));
+        eve.id = eveReg.playerId;
         await eve.expect('room:joined', () => eve.send('room:join', { roomId: 'PULL' }));
 
-        const serverSaw = alice.wait('player:left', { where: d => d.playerId === 'id-eve', timeout: 12000 });
+        const serverSaw = alice.wait('player:left', { where: d => d.playerId === eve.id, timeout: 12000 });
         const eveSaw = eve.waitStatus('disconnected', { fresh: true, timeout: 12000 });
         const t1 = Date.now();
         relay.blackhole(true);
@@ -378,9 +431,10 @@ function startMovers(clients) {
 
         // ---- 6. clean quit --------------------------------------------------------------------
         log('6. clean quit (TCP FIN / UDP BYE)');
-        await eve.expect('player:registered', () => eve.send('player:register', { id: 'id-eve', name: 'Eve', color: '#117f2d' }));
+        const eveBack = await eve.expect('player:registered', () => eve.send('player:register', { name: 'Eve', password: passwords.Eve, color: '#117f2d' }));
+        ok(eveBack.playerId === eve.id, 'after reconnect, the same password returns the same id');
         await eve.expect('room:joined', () => eve.send('room:join', { roomId: 'PULL' }));
-        const quitP = alice.wait('player:left', { where: d => d.playerId === 'id-eve', timeout: 9000 });
+        const quitP = alice.wait('player:left', { where: d => d.playerId === eve.id, timeout: 9000 });
         const t3 = Date.now();
         const eveStats = eve.stats();
         eve.close();

@@ -8,6 +8,7 @@ import {Button} from '../components/Button.jsx';
  */
 export function Menu({onJoinGame}) {
   const [playerName, setPlayerName] = useState('');
+  const [password, setPassword] = useState('');
   const [selectedColor, setSelectedColor] = useState(null);
   const [isRegistered, setIsRegistered] = useState(false);
   const isRegisteredRef = useRef(false);
@@ -45,8 +46,10 @@ export function Menu({onJoinGame}) {
       onJoinGameRef.current({roomId: data.roomId, playerId, isHost: data.room.host.id === playerId});
     };
 
-    const onPlayerRegistered = () => {
-      console.log('Player registered');
+    const onPlayerRegistered = (data) => {
+      // The server issued this id. The client never chooses it.
+      if (data?.playerId) sessionStorage.setItem('playerId', data.playerId);
+      console.log('Player registered', data?.playerId);
       isRegisteredRef.current = true;
       setIsRegistered(true);
     };
@@ -96,12 +99,15 @@ export function Menu({onJoinGame}) {
       setError('Please enter a name');
       return;
     }
+    if (password.length < 4) {
+      setError('Password must be at least 4 characters');
+      return;
+    }
 
     if (!net.connected) {
       setError('Not connected to server');
       return;
     }
-    const playerId = getPlayerId();
 
     localStorage.setItem('playerName', playerName.trim());
 
@@ -109,8 +115,10 @@ export function Menu({onJoinGame}) {
     const playerColor = selectedColor || getRandomColor();
     console.log('Registering player with color:', playerColor, 'Selected:', selectedColor);
 
+    // No player id here: the server creates one (new account) or looks up the existing one.
+    // A wrong password comes back as player:register:error.
     net.emit('player:register', {
-      id: playerId, name: playerName.trim(), color: playerColor,
+      name: playerName.trim(), password, color: playerColor,
     });
 
     setError('');
@@ -145,7 +153,8 @@ export function Menu({onJoinGame}) {
     <div className={styles.card}>
       <h1 className={styles.title}>Among Us</h1>
       {!isRegistered ? (<div className={styles.section}>
-        <h2 className={styles.subtitle}>Enter Your Name</h2>
+        <h2 className={styles.subtitle}>Log in</h2>
+        <p className={styles.hint}>A new name creates an account. The same name later must use the same password.</p>
         <input
           type="text"
           placeholder="Your name..."
@@ -153,6 +162,16 @@ export function Menu({onJoinGame}) {
           onChange={(e) => setPlayerName(e.target.value)}
           className={styles.input}
           maxLength={16}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleRegister(); }}
+        />
+        <input
+          type="password"
+          placeholder="Password..."
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className={styles.input}
+          maxLength={64}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleRegister(); }}
         />
 
         <div className={styles.colorPickerSection}>
@@ -178,7 +197,7 @@ export function Menu({onJoinGame}) {
           )}
         </div>
 
-        <Button onClick={handleRegister} children="Continue"/>
+        <Button onClick={handleRegister} children="Register / Log in"/>
       </div>) : (<div className={styles.section}>
         <p className={styles.welcome}>Welcome, {playerName}!</p>
         <div>
@@ -226,23 +245,8 @@ function generateRoomId() {
   return result;
 }
 
-function generateUserId() {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 16; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-const getPlayerId = () => {
-  const playerId = sessionStorage.getItem('playerId');
-  if (!playerId) {
-    const id = generateUserId();
-    sessionStorage.setItem('playerId', id);
-    return id;
-  }
-  return playerId;
-};
+/** Set by the server in player:registered. Empty until login succeeds. */
+const getPlayerId = () => sessionStorage.getItem('playerId');
 /**
  * Available Among Us colors
  */
