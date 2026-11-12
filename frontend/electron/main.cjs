@@ -19,6 +19,12 @@
 //
 // Usage (the last occurrence of a flag wins, so "npm run tcp -- --server 192.168.1.20" works):
 //   electron electron/main.cjs --proto tcp|udp --server <ip> --port <n> [--loss 0.1] [--dev]
+//
+// Where the server address comes from (first one found wins), so it is never hard-coded:
+//   1. --server <ip> / --port <n> on the command line
+//   2. environment variables GAME_SERVER / GAME_PORT   (e.g. the server's Tailscale 100.x address)
+//   3. frontend/server.json  {"server": "100.101.102.103", "tcpPort": 5000, "udpPort": 5001}
+//   4. 127.0.0.1 and the default port (one-PC testing)
 
 const path = require('node:path');
 const fs = require('node:fs');
@@ -61,10 +67,26 @@ function parseArgs(argv) {
     return args;
 }
 
+/** frontend/server.json, if present (written by scripts/set-server.ps1 / set-server.sh). */
+function readServerConfig() {
+    const file = path.resolve(__dirname, '..', 'server.json');
+    try {
+        const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return cfg && typeof cfg === 'object' ? cfg : {};
+    } catch (err) {
+        if (err.code !== 'ENOENT') console.warn(`[client] ignoring ${file}: ${err.message}`);
+        return {};
+    }
+}
+
 const args = parseArgs(process.argv.slice(1));
+const fileCfg = readServerConfig();
 const PROTO = String(args.proto || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
-const SERVER = typeof args.server === 'string' ? args.server : '127.0.0.1';
-const PORT = Number(args.port) || (PROTO === 'tcp' ? DEFAULT_TCP_PORT : DEFAULT_UDP_PORT);
+const SERVER = [args.server, process.env.GAME_SERVER, fileCfg.server]
+    .find((v) => typeof v === 'string' && v.trim() !== '')?.trim() || '127.0.0.1';
+const PORT = Number(args.port) || Number(process.env.GAME_PORT)
+    || Number(PROTO === 'tcp' ? fileCfg.tcpPort : fileCfg.udpPort)
+    || (PROTO === 'tcp' ? DEFAULT_TCP_PORT : DEFAULT_UDP_PORT);
 const LOSS = PROTO === 'udp' ? Math.min(Math.max(Number(args.loss) || 0, 0), 0.9) : 0;
 const DEV = args.dev === true || args.dev === 'true';
 if (PROTO === 'tcp' && Number(args.loss) > 0) {
@@ -186,13 +208,34 @@ ipcMain.handle('net:info', () => (client ? client.status() : null));
 // ---------------------------------------------------------------------------------------------
 // 4. Statistics every second: to the page (network HUD) and to a CSV file (comparison slides).
 // ---------------------------------------------------------------------------------------------
-const CSV_COLUMNS = ['time', 'proto', 'state', 'rttMs', 'msgsOut', 'msgsIn', 'bytesOut', 'bytesIn',
+// One line per second. Columns:
+//   rttMs                 latest PING -> PONG round trip
+//   msgsOutPerSec/InPerSec  messages (TCP lines / UDP datagrams) sent and received during the last second
+//   msgsOut ... bytesIn   running totals
+//   fastLost, lossPct     UDP only: position datagrams that never arrived (gaps in their counter), and
+//                         that as a % of all position datagrams expected so far
+//   retransmits ...       UDP only: what our reliability layer did
+const CSV_COLUMNS = ['time', 'proto', 'server', 'state', 'rttMs', 'msgsOutPerSec', 'msgsInPerSec',
+    'msgsOut', 'msgsIn', 'bytesOut', 'bytesIn', 'fastLost', 'lossPct',
     'retransmits', 'duplicatesIgnored', 'outOfOrderBuffered', 'staleDropped', 'simulatedLoss'];
-// Retransmissions, duplicates and reordering exist in TCP too, but the OS handles them invisibly,
-// so these columns stay empty for TCP (use Wireshark's TCP analysis to see them).
-const UDP_ONLY = new Set(['retransmits', 'duplicatesIgnored', 'outOfOrderBuffered', 'staleDropped', 'simulatedLoss']);
+// Losses, retransmissions, duplicates and reordering exist in TCP too, but the OS handles them
+// invisibly, so these columns stay empty for TCP (use Wireshark's TCP analysis to see them).
+const UDP_ONLY = new Set(['fastLost', 'lossPct', 'retransmits', 'duplicatesIgnored', 'outOfOrderBuffered',
+    'staleDropped', 'simulatedLoss']);
 
-function writeCsvLine(stats) {
+function csvRow(stats) {
+    const expected = (stats.fastReceived || 0) + (stats.fastLost || 0);
+    return {
+        ...stats,
+        server: `${SERVER}:${PORT}`,
+        msgsOutPerSec: stats.perSecond?.msgsOut,
+        msgsInPerSec: stats.perSecond?.msgsIn,
+        lossPct: expected > 0 ? ((100 * stats.fastLost) / expected).toFixed(2) : '0.00',
+    };
+}
+
+function writeCsvLine(rawStats) {
+    const stats = csvRow(rawStats);
     const values = CSV_COLUMNS.map((col) => {
         if (col === 'time') return new Date().toISOString();
         if (PROTO === 'tcp' && UDP_ONLY.has(col)) return '';
