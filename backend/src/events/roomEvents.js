@@ -99,7 +99,7 @@ export function handleSessionGone(ctx, sessionId, reason) {
  * issues the id. The same name later is a login: the password must match, or it is refused.
  * Any "id" field in the payload is ignored.
  */
-function playerRegister(ctx, sessionId, data) {
+async function playerRegister(ctx, sessionId, data) {
     const name = typeof data.name === 'string' ? data.name.trim().slice(0, MAX_NAME_LENGTH) : '';
     const password = typeof data.password === 'string' ? data.password : '';
     if (!name || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
@@ -108,7 +108,10 @@ function playerRegister(ctx, sessionId, data) {
         });
     }
 
-    const account = Accounts.loginOrRegister(name, password);
+    // Hashing takes a few tens of ms and runs off the main thread (see accounts.manager.js).
+    const account = await Accounts.loginOrRegister(name, password);
+    // The client may have disconnected while its password was being checked.
+    if (!ctx.isConnected(sessionId)) return;
     if (!account.ok) {
         return ctx.sendTo(sessionId, 'player:register:error', { message: account.message });
     }

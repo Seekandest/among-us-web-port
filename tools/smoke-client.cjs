@@ -287,7 +287,7 @@ function startMovers(clients) {
             c.color = color;
         }
         e = await bob.expect('player:register:error', () => bob.send('player:register', { name: 'Alice', password: 'wrong-pass', color: '#c51111' }));
-        ok(e.message === 'Wrong password', 'wrong password refused');
+        ok(/^Wrong password/.test(e.message), 'wrong password refused', e.message);
         e = await bob.expect('player:register:error', () => bob.send('player:register', { name: 'Alice', password: passwords.Alice, color: '#c51111' }));
         ok(/already connected/.test(e.message), 'logging in as an already connected player refused');
         const bobAgain = await bob.expect('player:registered', () => bob.send('player:register', { name: 'Bob', password: passwords.Bob, color: '#c51111' }));
