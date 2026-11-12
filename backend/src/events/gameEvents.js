@@ -13,22 +13,14 @@
 
 import { RoomsManager, SPAWN } from '../managers/rooms.manager.js';
 import { PlayersManager } from '../managers/players.manager.js';
+import { MOVEMENT, MAP_BOUNDS } from '../config.js';
 
 export const MIN_PLAYERS_TO_START = 2;     // 3 for the real demo; 2 is handy for testing
 const KILL_RANGE_PX = 100;
 const KILL_COOLDOWN_MS = 10_000;
 const MEETING_DURATION_MS = 30_000;
 
-// Same speeds as the client (BaseGameScene.handleMovement): lobby 350 px/s, game 100 px/s.
-const LOBBY_SPEED_PX_S = 350;
-const GAME_SPEED_PX_S = 100;
-const SPEED_TOLERANCE = 1.15;          // small slack for frame timing, not a second speed
-const MOVE_SLACK_PX = 2;               // rounding only
-const MOVE_BANK_CAP_MS = 400;          // how much "unspent" movement time a client may save up
-// Tile maps: lobby.json is 154x126 tiles, map.json is 126x70, tiles are 8 px.
-const LOBBY_MAP = { maxX: 154 * 8, maxY: 126 * 8 };   // 1232 x 1008
-const GAME_MAP = { maxX: 126 * 8, maxY: 70 * 8 };     // 1008 x 560
-const MAP_EDGE_PX = 8;                 // one tile: the sprite center can sit on the border
+// Movement limits (MAX_SPEED, map bounds, tolerances) live in one file: backend/src/config.js.
 
 const POINTS = {
     KILL: 1,            // imposter, per kill
@@ -170,11 +162,20 @@ function gameStart(ctx, sessionId) {
     ctx.broadcastRooms();
 }
 
+function clamp(v, min, max) {
+    return Math.min(max, Math.max(min, v));
+}
+
 /**
  * player:move {x, y, d, moving} - sent ~20 times per second while moving.
- * The server keeps the position only if it is inside the map and no faster than the
- * client is allowed to walk. Anything else is dropped, and the sender is told the
- * position the server still believes (so a cheated client snaps back).
+ * The server's position is authoritative:
+ *   1. the requested position is CLAMPED to the map bounds (config.js MAP_BOUNDS);
+ *   2. if reaching it would be faster than MAX_SPEED (config.js MOVEMENT), based on the time since
+ *      this player's last accepted update, the move is REJECTED and the player stays where the
+ *      server has them.
+ * Whenever the server's position differs from what the client asked for, the sender gets
+ * player:moved {corrected: true} with the server's position, and its sprite snaps there.
+ * Other players only ever see accepted positions.
  */
 function playerMove(ctx, sessionId, data) {
     const player = PlayersManager.getPlayer(ctx.playerIdOf(sessionId));
@@ -184,39 +185,37 @@ function playerMove(ctx, sessionId, data) {
     const room = RoomsManager.fetchRoom(player.roomId);
     if (!room) return;
 
-    const bounds = room.started ? GAME_MAP : LOBBY_MAP;
-    const maxSpeed = room.started ? GAME_SPEED_PX_S : LOBBY_SPEED_PX_S;
-    const x = data.x;
-    const y = data.y;
-    const outside = x < -MAP_EDGE_PX || y < -MAP_EDGE_PX
-        || x > bounds.maxX + MAP_EDGE_PX || y > bounds.maxY + MAP_EDGE_PX;
+    const area = room.started ? 'game' : 'lobby';
+    const bounds = MAP_BOUNDS[area];
+    const maxSpeed = MOVEMENT.MAX_SPEED[area];
 
-    const now = Date.now();
+    // 1. Map bounds: clamp.
+    const x = clamp(data.x, bounds.minX, bounds.maxX);
+    const y = clamp(data.y, bounds.minY, bounds.maxY);
+    const clamped = x !== data.x || y !== data.y;
+
+    // 2. Speed: distance from the server's position vs. what MAX_SPEED allows in the elapsed time.
     // Right after a spawn or a kill, allow one client tick of movement, not a leap across the map.
     // After that, unspent time accumulates (capped) so a short burst of delayed packets still lands.
+    const now = Date.now();
     let bank;
-    if (player._moveAt == null) bank = 80;
-    else bank = Math.min(MOVE_BANK_CAP_MS, (player._moveBankMs || 0) + Math.max(0, now - player._moveAt));
+    if (player._moveAt == null) bank = MOVEMENT.FIRST_MOVE_MS;
+    else bank = Math.min(MOVEMENT.BANK_CAP_MS, (player._moveBankMs || 0) + Math.max(0, now - player._moveAt));
     const dist = Math.hypot(x - player.state.x, y - player.state.y);
-    const allowed = maxSpeed * SPEED_TOLERANCE * (bank / 1000) + MOVE_SLACK_PX;
-    const tooFast = dist > allowed;
+    const allowed = maxSpeed * MOVEMENT.SPEED_TOLERANCE * (bank / 1000) + MOVEMENT.SLACK_PX;
 
-    if (outside || tooFast) {
+    if (dist > allowed) {
         player._moveAt = now;
-        if (dist > 30 || outside) {
-            console.log(`[game] rejected move from ${player.name}: (${Math.round(x)}, ${Math.round(y)}) ${outside ? 'outside the map' : 'faster than ' + maxSpeed + ' px/s'}`);
+        if (dist > 30) {
+            console.log(`[game] rejected move from ${player.name}: (${Math.round(data.x)}, ${Math.round(data.y)}), ` +
+                `${Math.round(dist)} px in ${Math.round(bank)} ms is faster than ${maxSpeed} px/s`);
         }
         // Tell the sender where they actually are. Other players never saw the bad position.
-        ctx.sendTo(sessionId, 'player:moved', {
-            id: player.id,
-            roomId: player.roomId,
-            ...player.state,
-            corrected: true,
-        });
+        sendCorrection(ctx, sessionId, player);
         return;
     }
 
-    const usedMs = maxSpeed > 0 ? (dist / (maxSpeed * SPEED_TOLERANCE)) * 1000 : 0;
+    const usedMs = maxSpeed > 0 ? (dist / (maxSpeed * MOVEMENT.SPEED_TOLERANCE)) * 1000 : 0;
     player._moveAt = now;
     player._moveBankMs = Math.max(0, bank - usedMs);
 
@@ -229,9 +228,24 @@ function playerMove(ctx, sessionId, data) {
     // The room keeps a reference to the same player object, so this updates both.
     PlayersManager.updatePlayerState(player.id, state);
 
+    if (clamped) {
+        console.log(`[game] clamped move from ${player.name}: (${Math.round(data.x)}, ${Math.round(data.y)}) -> (${Math.round(x)}, ${Math.round(y)})`);
+        sendCorrection(ctx, sessionId, player);
+    }
+
     // Relay to the OTHER players only: the sender already knows where it is.
     // In the UDP version this goes out as an unreliable FAST packet (see protocol UNRELIABLE_TYPES).
     ctx.sendToRoom(player.roomId, 'player:moved', { id: player.id, roomId: player.roomId, ...state }, player.id);
+}
+
+/** The server's (authoritative) position, sent back to the player whose move was corrected. */
+function sendCorrection(ctx, sessionId, player) {
+    ctx.sendTo(sessionId, 'player:moved', {
+        id: player.id,
+        roomId: player.roomId,
+        ...player.state,
+        corrected: true,
+    });
 }
 
 /** player:kill {playerId} - playerId is the VICTIM. The killer is whoever owns this session. */
