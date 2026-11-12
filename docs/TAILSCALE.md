@@ -123,11 +123,11 @@ Test-NetConnection 100.101.102.103 -Port 5000     # TcpTestSucceeded : True
 cd frontend
 npm run tcp
 ```
-The window title must read `Among Us Arena — TCP → 100.101.102.103:5000 — connected`, and the server
+The network bar at the top of the game page must read `TCP → 100.101.102.103:5000 · connected`, and the server
 prints `[TCP] + tcp-1 connected from 100.x.y.z:port` (the **client's Tailscale address**).
 
 For UDP, `Test-NetConnection` cannot help (no handshake to test). Start `npm run udp` on both sides: the
-title must reach `connected`, and the server prints `[UDP] + udp-1 connected from 100.x.y.z:port`.
+network bar must reach `connected`, and the server prints `[UDP] + udp-1 connected from 100.x.y.z:port`.
 
 ## 5. Direct path or DERP relay? (run this from every demo network)
 
@@ -170,7 +170,7 @@ Metrics are recorded automatically:
 2. Each client: `cd frontend; npm run tcp`
 3. Play a full game: register, create/join a room, start, move a lot, one kill, one meeting with votes,
    end screen with the ranking, then **Play again** once.
-4. Close the client windows, stop the server (Ctrl+C).
+4. Close the game tabs (or Ctrl+C in each agent terminal), stop the server (Ctrl+C).
 5. Collect the CSV files into one folder per run, for example `runs/wan-tcp/`, named after the laptop.
 6. Repeat with `npm run udp` on the server and the clients, into `runs/wan-udp/`.
 7. Summarize:
@@ -204,7 +204,7 @@ reliability layer at work, and capture with Wireshark on the **Tailscale** inter
 - [ ] Windows Update paused, notifications off (Focus Assist).
 - [ ] Tailscale running on all 4 (tray icon), `tailscale status` shows everyone.
 - [ ] Rerun `scripts\tailscale-check.ps1` on each client: still direct?
-- [ ] Start the server, then the 3 clients; check the 3 window titles say `connected`.
+- [ ] Start the server, then the 3 clients; check the 3 network bars say `connected`.
 - [ ] If the venue's network fails: switch to hotspots; if Tailscale fails: ZeroTier (section 8); if
       everything fails: play the backup videos.
 
@@ -238,7 +238,7 @@ direct path on some network, or if the Tailscale service is down.
 
 | Symptom | Check |
 |---|---|
-| Client title stays on `connecting` | `tailscale ping au-server` works? Server running the same version (tcp/udp)? Firewall rule on the server? Right address in `frontend/server.json`? |
+| Network bar stays on `connecting` | `tailscale ping au-server` works? Server running the same version (tcp/udp)? Firewall rule on the server? Right address in `frontend/server.json`? |
 | `ECONNREFUSED` (TCP) | Server not started, or started with `udp`. |
 | Works on LAN, not over Tailscale | Firewall rule without `-Profile Any` (Tailscale adapter = Public network). Rerun `scripts\firewall-windows.ps1`. |
 | High RTT (> 100 ms) between nearby laptops | DERP relay: section 5. |

@@ -70,21 +70,27 @@ The game exists in **two versions with identical rules and features**. Only the 
 ```
  Client computer (x3)                                         Server computer
  +----------------------------------------------+             +-------------------------------------+
- |  Game UI: React + Phaser (a web page)        |             |  backend/src/main.js                |
- |     |  window.gameNet   <-- Electron IPC,    |             |    game rules: events/*.js          |
- |     |                       inside the PC    |             |    (shared by both versions)        |
- |  Electron main process (Node.js)             |             |              |                      |
+ |  Browser tab: React + Phaser game            |             |  backend/src/main.js                |
+ |     |  http://localhost:8080  <-- loopback,  |             |    game rules: events/*.js          |
+ |     |              never leaves the PC       |             |    (shared by both versions)        |
+ |  Local agent: web/agent.cjs (Node.js)        |             |              |                      |
  |     tcpClient.cjs  -> net.Socket   ==========|== TCP 5000 =|=> transport/tcpServer.js  (net)     |
  |  or udpClient.cjs  -> dgram.Socket ==========|== UDP 5001 =|=> transport/udpServer.js  (dgram)   |
  +----------------------------------------------+             +-------------------------------------+
 ```
 
-**Why a desktop app (Electron)?** A web page is not allowed to open raw TCP or UDP sockets: browsers only
-offer HTTP, WebSocket and WebRTC, which are protocols built on top and would hide the transport. Electron's
-main process is a full Node.js program, so it can use `net` and `dgram`. The game UI talks to it through
-Electron **IPC**, a channel between two processes of the same app on the same computer, not a network
-socket. The UI files are read from disk (`frontend/dist`, through a local `app://` scheme), not downloaded.
+**Why a local agent next to the browser?** A web page is not allowed to open raw TCP or UDP sockets:
+browsers only offer HTTP, WebSocket and WebRTC, which are protocols built on top and would hide the
+transport (and the UDP version must use no TCP at all). So the game is played in a normal browser tab, and
+a small Node.js program on the same computer, the **agent** (`frontend/web/agent.cjs`), owns the real
+`net` / `dgram` socket. The agent serves the UI from disk (`frontend/dist`) and talks to the tab over HTTP
+on `127.0.0.1` only (Server-Sent Events for server → page, `POST /net/send` for page → server). That is
+loopback: it never reaches the network, and Wireshark on Wi-Fi/Ethernet/Tailscale never sees it.
 **So the only game traffic leaving a client is our own TCP segments (TCP version) or UDP datagrams (UDP version).**
+
+The **desktop version** (Electron) still exists and works the same way, with Electron IPC instead of the
+loopback HTTP: `npm run desktop:tcp` / `npm run desktop:udp`. Both use the same `tcpClient.cjs` /
+`udpClient.cjs`, and the page talks to either through the same small interface (`src/services/net.js`).
 
 **One game, two transports.** Both server transports expose the same 4 operations, and the game rules only
 use those:
@@ -356,9 +362,10 @@ npm install        # no dependencies: only Node's built-in modules
 **Each client computer:**
 ```powershell
 cd frontend
-npm install        # also downloads Electron (~100 MB, first time only)
+npm install        # first time only (also downloads Electron, used only by the desktop version)
 npm run build      # builds the game UI into frontend/dist (again after any change in src/)
 ```
+Any recent browser works (Chrome, Edge, Firefox).
 
 ---
 
@@ -380,10 +387,12 @@ npm run tcp
 cd frontend
 npm run tcp -- --server <SERVER_IP>        # e.g. npm run tcp -- --server 192.168.1.20
 ```
-The window title shows `Among Us Arena — TCP → 192.168.1.20:5000 — connected`; the server prints
-`[TCP] + tcp-1 connected from 192.168.1.31:52144`.
+The agent opens the game in your browser at `http://localhost:8080` (if that port is taken, 8081, 8082...;
+the address is printed). The network bar at the top of the page shows
+`TCP → 192.168.1.20:5000 · connected`; the server prints `[TCP] + tcp-1 connected from 192.168.1.31:52144`.
 
-**3. Play** ([section 1](#1-the-game)). Closing a window sends a TCP FIN: the server removes the player at once.
+**3. Play** ([section 1](#1-the-game)). Closing the tab (or Ctrl+C in the agent's terminal) leaves the game:
+5 s later the agent closes its socket with a TCP FIN, and the server removes the player at once.
 
 ## 6. Running the UDP version
 
@@ -402,8 +411,8 @@ npm run udp
 cd frontend
 npm run udp -- --server <SERVER_IP>
 ```
-The client sends `HELLO` every second until the server answers `WELCOME`; the title then shows
-`Among Us Arena — UDP → 192.168.1.20:5001 — connected`.
+The agent sends `HELLO` every second until the server answers `WELCOME`, and opens the game in your
+browser; the network bar then shows `UDP → 192.168.1.20:5001 · connected`.
 
 **3. Optional: show the reliability layer under loss**
 ```powershell
@@ -413,7 +422,8 @@ npm run udp -- --server <SERVER_IP> --loss 0.1     # a client (frontend folder)
 > Loss on one side (or 0.1 on both) is enough for a demo. `0.2` on both sides means about 36% loss per
 > direction; an idle client can then occasionally miss 5 heartbeats in a row and be disconnected.
 
-**4. Play.** Closing a window sends `BYE`; if that datagram is lost, the server removes the player after 5 s.
+**4. Play.** Closing the tab sends `BYE` 5 s later; if that datagram is lost, the server removes the player
+after its 5 s timeout.
 
 ---
 
@@ -423,8 +433,10 @@ npm run udp -- --server <SERVER_IP> --loss 0.1     # a client (frontend folder)
 Four terminals (`udp` instead of `tcp` for the UDP version):
 ```powershell
 cd backend;  npm run tcp        # terminal 1: server
-cd frontend; npm run tcp        # terminals 2, 3, 4: one game window each (server defaults to 127.0.0.1)
+cd frontend; npm run tcp        # terminals 2, 3, 4: one agent each -> opens localhost:8080, 8081, 8082
 ```
+Put the 3 game tabs in **3 separate browser windows** side by side, not 3 tabs of one window: browsers
+pause the game loop of hidden tabs, so a background tab would stop sending its position.
 
 ### Four computers on the same network (live demo)
 1. Connect the 4 computers to the same Wi-Fi/router (campus networks often block device-to-device traffic:
@@ -519,7 +531,9 @@ It uses ports 5200/5201 (no conflict with a running game). Expected: `ALL 34 CHE
 | `timeout: nothing received … for 5 s` | The other side went silent: Wi-Fi lost, laptop asleep, server stopped. |
 | "The UI is not built yet" | Run `npm run build` in `frontend`. |
 | Works on the server PC, not from other PCs | Firewall rule missing (section 7) or the network isolates devices: use a hotspot or Tailscale. |
-| "Start the game with npm run tcp or npm run udp" | The page was opened in a normal browser; it only runs inside the Electron app. |
+| "This page needs the local client agent" | The page was opened as a file. Start `npm run tcp` / `npm run udp` in `frontend` and use the address it prints. |
+| Network bar says "local agent not reachable" | The agent's terminal was closed or stopped. Start it again; the page reconnects by itself. |
+| Game freezes in one of several tabs | Hidden tabs are paused by the browser: one browser window per player. |
 
 ---
 
@@ -541,9 +555,12 @@ among-us-web-port/
 │   │   └── gameEvents.js           #   start, move, kill, meeting, vote, scores, game end
 │   └── managers/                   #   rooms and players state
 ├── frontend/
+│   ├── web/
+│   │   └── agent.cjs               # WEB version: owns the socket, serves the UI on localhost, stats CSV
 │   ├── electron/
-│   │   ├── main.cjs                # desktop shell: owns the socket, serves the UI from disk, stats CSV
-│   │   ├── preload.cjs             # window.gameNet: the page's only access to the network (IPC)
+│   │   ├── clientOptions.cjs       # shared by both launchers: options, server address, stats CSV
+│   │   ├── main.cjs                # DESKTOP version: Electron window that owns the socket
+│   │   ├── preload.cjs             # window.gameNet for the desktop page (IPC)
 │   │   ├── tcpClient.cjs           # TCP client (net): welcome, PING, timeout, reconnect every 2 s
 │   │   └── udpClient.cjs           # UDP client (dgram): HELLO loop, reliable channel, BYE
 │   └── src/
