@@ -59,7 +59,10 @@ if (proto !== 'tcp' && proto !== 'udp') {
     console.error('Usage: node src/main.js --proto tcp|udp [--port <n>] [--loss <0..1>]');
     process.exit(1);
 }
-const port = Number(args.port) || (proto === 'tcp' ? DEFAULT_TCP_PORT : DEFAULT_UDP_PORT);
+// Port: --port, else the GAME_PORT environment variable, else 5000 (TCP) / 5001 (UDP).
+// The server always listens on 0.0.0.0 (every interface, Tailscale/ZeroTier included), so it never
+// needs to know its own IP address; only the clients do (GAME_SERVER, see frontend/electron/main.cjs).
+const port = Number(args.port) || Number(process.env.GAME_PORT) || (proto === 'tcp' ? DEFAULT_TCP_PORT : DEFAULT_UDP_PORT);
 const loss = Number(args.loss) || 0;
 if (!(loss >= 0 && loss < 1)) {
     console.error('--loss must be between 0 and 1 (e.g. 0.1 = drop 10% of datagrams)');
@@ -160,11 +163,14 @@ transport.on('message', (sessionId, type, data) => {
 
     // Never trust the payload's shape: it came from the network.
     const safeData = data && typeof data === 'object' ? data : {};
+    // A bug in one handler must not crash the server for everybody. Some handlers are async
+    // (player:register waits for the password hash), so catch both thrown errors and rejections.
+    const onError = (err) => console.error(`[server] error while handling "${type}" from ${sessionId}:`, err);
     try {
-        handler(ctx, sessionId, safeData);
+        const result = handler(ctx, sessionId, safeData);
+        if (result && typeof result.then === 'function') result.catch(onError);
     } catch (err) {
-        // A bug in one handler must not crash the server for everybody.
-        console.error(`[server] error while handling "${type}" from ${sessionId}:`, err);
+        onError(err);
     }
 });
 
@@ -191,7 +197,8 @@ setInterval(() => {
 
     if (proto === 'udp' && transport.totals) {
         const t = transport.totals;
-        console.log(`[stats]   datagrams in/out ${t.datagramsIn}/${t.datagramsOut}, bytes in/out ${t.bytesIn}/${t.bytesOut}, simulated loss ${t.simulatedLoss}`);
+        console.log(`[stats]   datagrams in/out ${t.datagramsIn}/${t.datagramsOut}, bytes in/out ${t.bytesIn}/${t.bytesOut}, ` +
+            `simulated loss ${t.simulatedLoss}, wrong session token ${t.badToken}`);
     }
     for (const s of sessions) {
         const who = sessionToPlayer.get(s.id) || 'not registered';
@@ -199,7 +206,8 @@ setInterval(() => {
             console.log(`[stats]   ${s.id} ${s.address} (${who}): bytes in/out ${s.bytesIn}/${s.bytesOut}, msgs in/out ${s.msgsIn}/${s.msgsOut}`);
         } else {
             console.log(`[stats]   ${s.id} ${s.address} (${who}): reliable ${s.reliableSent}, fast ${s.fastSent}, ` +
-                `retransmits ${s.retransmits}, dup ${s.duplicatesIgnored}, out-of-order ${s.outOfOrderBuffered}, ` +
+                `retransmits ${s.retransmits}, positions lost ${s.fastLost}/${s.fastLost + s.fastReceived}, ` +
+                `dup ${s.duplicatesIgnored}, out-of-order ${s.outOfOrderBuffered}, ` +
                 `stale ${s.staleDropped}, waiting ACK ${s.waitingForAck}, RTO ${s.rtoMs} ms`);
         }
     }
