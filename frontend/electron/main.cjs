@@ -47,54 +47,18 @@ if (typeof electron === 'string') {
 const { app, BrowserWindow, ipcMain, protocol, net: electronNet } = electron;
 const { createTcpClient } = require('./tcpClient.cjs');
 const { createUdpClient } = require('./udpClient.cjs');
-const { DEFAULT_TCP_PORT, DEFAULT_UDP_PORT } = require('../../shared/protocol.cjs');
+const { parseArgs, resolveOptions, createCsvLogger } = require('./clientOptions.cjs');
 
 // ---------------------------------------------------------------------------------------------
-// 1. Command-line arguments (last occurrence wins). Accepts "--port 5000" and "--port=5000".
+// 1. Command-line arguments and server address (shared with the web version: clientOptions.cjs).
 // ---------------------------------------------------------------------------------------------
-function parseArgs(argv) {
-    const args = {};
-    for (let i = 0; i < argv.length; i++) {
-        const a = argv[i];
-        if (!a.startsWith('--')) continue;
-        const eq = a.indexOf('=');
-        if (eq !== -1) { args[a.slice(2, eq)] = a.slice(eq + 1); continue; }
-        const next = argv[i + 1];
-        if (next === undefined || next.startsWith('--')) { args[a.slice(2)] = true; continue; }
-        args[a.slice(2)] = next;
-        i++;
-    }
-    return args;
-}
-
-/** frontend/server.json, if present (written by scripts/set-server.ps1 / set-server.sh). */
-function readServerConfig() {
-    const file = path.resolve(__dirname, '..', 'server.json');
-    try {
-        const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
-        return cfg && typeof cfg === 'object' ? cfg : {};
-    } catch (err) {
-        if (err.code !== 'ENOENT') console.warn(`[client] ignoring ${file}: ${err.message}`);
-        return {};
-    }
-}
-
 const args = parseArgs(process.argv.slice(1));
-const fileCfg = readServerConfig();
-const PROTO = String(args.proto || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
-const SERVER = [args.server, process.env.GAME_SERVER, fileCfg.server]
-    .find((v) => typeof v === 'string' && v.trim() !== '')?.trim() || '127.0.0.1';
-const PORT = Number(args.port) || Number(process.env.GAME_PORT)
-    || Number(PROTO === 'tcp' ? fileCfg.tcpPort : fileCfg.udpPort)
-    || (PROTO === 'tcp' ? DEFAULT_TCP_PORT : DEFAULT_UDP_PORT);
-const LOSS = PROTO === 'udp' ? Math.min(Math.max(Number(args.loss) || 0, 0), 0.9) : 0;
+const { proto: PROTO, server: SERVER, port: PORT, loss: LOSS } = resolveOptions(args);
 const DEV = args.dev === true || args.dev === 'true';
-if (PROTO === 'tcp' && Number(args.loss) > 0) {
-    console.warn('[client] --loss only applies to the UDP version (TCP loss is repaired by the OS)');
-}
 
 const DIST = path.resolve(__dirname, '..', 'dist');
-const CSV_FILE = path.join(process.cwd(), `netstats-${PROTO}-${process.pid}.csv`);
+const csv = createCsvLogger({ proto: PROTO, server: SERVER, port: PORT });
+const CSV_FILE = csv.file;
 
 // Each window gets its own Chromium profile folder, so 3 clients can run on the same PC
 // (otherwise the 2nd instance would fight over the profile lock / share sessionStorage).
@@ -208,51 +172,12 @@ ipcMain.handle('net:info', () => (client ? client.status() : null));
 // ---------------------------------------------------------------------------------------------
 // 4. Statistics every second: to the page (network HUD) and to a CSV file (comparison slides).
 // ---------------------------------------------------------------------------------------------
-// One line per second. Columns:
-//   rttMs                 latest PING -> PONG round trip
-//   msgsOutPerSec/InPerSec  messages (TCP lines / UDP datagrams) sent and received during the last second
-//   msgsOut ... bytesIn   running totals
-//   fastLost, lossPct     UDP only: position datagrams that never arrived (gaps in their counter), and
-//                         that as a % of all position datagrams expected so far
-//   retransmits ...       UDP only: what our reliability layer did
-const CSV_COLUMNS = ['time', 'proto', 'server', 'state', 'rttMs', 'msgsOutPerSec', 'msgsInPerSec',
-    'msgsOut', 'msgsIn', 'bytesOut', 'bytesIn', 'fastLost', 'lossPct',
-    'retransmits', 'duplicatesIgnored', 'outOfOrderBuffered', 'staleDropped', 'simulatedLoss'];
-// Losses, retransmissions, duplicates and reordering exist in TCP too, but the OS handles them
-// invisibly, so these columns stay empty for TCP (use Wireshark's TCP analysis to see them).
-const UDP_ONLY = new Set(['fastLost', 'lossPct', 'retransmits', 'duplicatesIgnored', 'outOfOrderBuffered',
-    'staleDropped', 'simulatedLoss']);
-
-function csvRow(stats) {
-    const expected = (stats.fastReceived || 0) + (stats.fastLost || 0);
-    return {
-        ...stats,
-        server: `${SERVER}:${PORT}`,
-        msgsOutPerSec: stats.perSecond?.msgsOut,
-        msgsInPerSec: stats.perSecond?.msgsIn,
-        lossPct: expected > 0 ? ((100 * stats.fastLost) / expected).toFixed(2) : '0.00',
-    };
-}
-
-function writeCsvLine(rawStats) {
-    const stats = csvRow(rawStats);
-    const values = CSV_COLUMNS.map((col) => {
-        if (col === 'time') return new Date().toISOString();
-        if (PROTO === 'tcp' && UDP_ONLY.has(col)) return '';
-        const v = stats[col];
-        return v === null || v === undefined ? '' : String(v);
-    });
-    const header = fs.existsSync(CSV_FILE) ? '' : CSV_COLUMNS.join(',') + '\n';
-    fs.appendFile(CSV_FILE, header + values.join(',') + '\n', (err) => {
-        if (err) console.warn(`[client] cannot write ${CSV_FILE}: ${err.message}`);
-    });
-}
-
+// The CSV columns are described in clientOptions.cjs (createCsvLogger).
 setInterval(() => {
     if (!client) return;
     const stats = client.stats();
     toRenderer('net:stats', { ...stats, server: SERVER, port: PORT });
-    writeCsvLine(stats);
+    csv.write(stats);
 }, 1000);
 
 // ---------------------------------------------------------------------------------------------
