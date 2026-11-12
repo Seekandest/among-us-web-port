@@ -24,8 +24,10 @@
     "scripts": {
         "dev": "vite --config vite/config.dev.mjs",
         "build": "vite build --config vite/config.prod.mjs",
-        "tcp": "electron electron/main.cjs --proto tcp",
-        "udp": "electron electron/main.cjs --proto udp"
+        "tcp": "node web/agent.cjs --proto tcp",
+        "udp": "node web/agent.cjs --proto udp",
+        "desktop:tcp": "electron electron/main.cjs --proto tcp",
+        "desktop:udp": "electron electron/main.cjs --proto udp"
     },
     "dependencies": {
         "phaser": "^3.90.0",
