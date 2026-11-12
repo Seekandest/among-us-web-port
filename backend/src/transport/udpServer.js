@@ -5,6 +5,9 @@
 // from every client, and each datagram tells us who sent it (rinfo.address + rinfo.port).
 // So everything TCP did for us, we do here, only where the game needs it:
 //   - "connection": HELLO -> WELCOME handshake creates a session for that address:port
+//   - identity:     WELCOME carries a random session TOKEN ("tok"). Every later datagram must carry it,
+//                   in both directions. A packet from the right ip:port with a missing or wrong
+//                   token is dropped, so forging a client's source address is not enough to act as it.
 //   - reliability:  shared/reliableUdp.cjs (seq + ACK + retransmission + order), one channel per client
 //   - disconnection: no packet for 5 s -> timeout; BYE -> clean leave; 25 resends without ACK -> dead
 //
@@ -17,6 +20,7 @@
 // Same interface as tcpServer.js: on('connect'|'message'|'disconnect'), send(sessionId, type, data).
 
 import dgram from 'node:dgram';
+import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 // The shared files are CommonJS (so Electron can require them too): import the whole module, then pick.
 import reliableUdp from '../../../shared/reliableUdp.cjs';
@@ -31,7 +35,7 @@ export function startUdpServer(port, { loss = 0 } = {}) {
     const sessionsByAddress = new Map(); // "ip:port" -> session
     const sessionsById = new Map();      // sessionId -> session
     let nextId = 1;
-    const totals = { datagramsIn: 0, datagramsOut: 0, bytesIn: 0, bytesOut: 0, simulatedLoss: 0 };
+    const totals = { datagramsIn: 0, datagramsOut: 0, bytesIn: 0, bytesOut: 0, simulatedLoss: 0, badToken: 0 };
 
     // Write one datagram to one address. Optional simulated loss (--loss 0.1 = drop 10%).
     function sendRaw(address, port, packet) {
@@ -48,10 +52,17 @@ export function startUdpServer(port, { loss = 0 } = {}) {
         socket.send(bytes, port, address);
     }
 
+    /** Every datagram to a known client carries its session token. */
+    function sendToSession(session, packet) {
+        sendRaw(session.ip, session.port, { ...packet, tok: session.token });
+    }
+
     function createSession(address, port) {
         const key = `${address}:${port}`;
         const session = {
             id: `udp-${nextId++}`,
+            // 64 random bits, known only to this client and the server (sent once, in WELCOME).
+            token: randomBytes(8).toString('hex'),
             key,
             ip: address,
             port,
@@ -60,7 +71,7 @@ export function startUdpServer(port, { loss = 0 } = {}) {
             channel: null,
         };
         session.channel = new ReliableChannel({
-            sendPacket: (packet) => sendRaw(address, port, packet),
+            sendPacket: (packet) => sendToSession(session, packet),
             onMessage: (type, data) => events.emit('message', session.id, type, data),
         });
         sessionsByAddress.set(key, session);
@@ -75,7 +86,7 @@ export function startUdpServer(port, { loss = 0 } = {}) {
         session.closed = true;
         sessionsByAddress.delete(session.key);
         sessionsById.delete(session.id);
-        if (sayBye) sendRaw(session.ip, session.port, { t: 'BYE', reason });
+        if (sayBye) sendToSession(session, { t: 'BYE', reason });
         console.log(`[UDP] - ${session.id} disconnected (${reason})`);
         events.emit('disconnect', session.id, reason);
     }
@@ -105,7 +116,8 @@ export function startUdpServer(port, { loss = 0 } = {}) {
             // (its sequence numbers start again at 1), so we start a fresh session too.
             if (session) closeSession(session, 'client restarted the handshake', { sayBye: false });
             session = createSession(rinfo.address, rinfo.port);
-            sendRaw(rinfo.address, rinfo.port, { t: 'WELCOME', sessionId: session.id, proto: 'udp' });
+            // The token goes out once, here. From now on the client must put it in every datagram.
+            sendToSession(session, { t: 'WELCOME', sessionId: session.id, proto: 'udp' });
             return;
         }
 
@@ -115,10 +127,20 @@ export function startUdpServer(port, { loss = 0 } = {}) {
             return;
         }
 
+        // Right address, wrong (or no) token: a forged or stale packet. Drop it without answering,
+        // and without counting it as "heard from the client" (it must not keep a dead session alive).
+        if (packet.tok !== session.token) {
+            totals.badToken++;
+            if (totals.badToken <= 5 || totals.badToken % 100 === 0) {
+                console.warn(`[UDP] dropped a ${packet.t} from ${key}: wrong session token (${totals.badToken} so far)`);
+            }
+            return;
+        }
+
         session.lastHeardAt = Date.now();
 
         if (packet.t === 'PING') {
-            sendRaw(session.ip, session.port, { t: 'PONG', ts: packet.ts });
+            sendToSession(session, { t: 'PONG', ts: packet.ts });
         } else if (packet.t === 'BYE') {
             closeSession(session, 'client said BYE', { sayBye: false });
         } else {
@@ -160,6 +182,7 @@ export function startUdpServer(port, { loss = 0 } = {}) {
         send,
         totals,
         sessionStats() {
+            // The token is a secret: never put it in logs or stats.
             return [...sessionsById.values()].map((s) => ({ id: s.id, address: s.key, ...s.channel.snapshot() }));
         },
     };
