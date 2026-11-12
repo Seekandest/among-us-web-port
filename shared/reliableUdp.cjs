@@ -43,6 +43,7 @@ class ReliableChannel {
         this.expectedSeq = 1;          // the next seq we are allowed to deliver to the game
         this.waiting = new Map();      // seq -> packet that arrived too early (a gap before it)
         this.lastFastN = new Map();    // key -> highest FAST number seen (to drop stale positions)
+        this.highestFastN = 0;         // highest FAST number seen on this channel (to count losses)
 
         // --- RTT estimate (used to choose how long to wait before resending) ---
         this.srtt = null;              // smoothed round-trip time in ms
@@ -55,6 +56,8 @@ class ReliableChannel {
             duplicatesIgnored: 0,
             outOfOrderBuffered: 0,
             staleDropped: 0,
+            fastReceived: 0,   // unreliable packets that arrived
+            fastLost: 0,       // unreliable packets that never arrived (gaps in their counter "n")
         };
     }
 
@@ -119,7 +122,19 @@ class ReliableChannel {
     }
 
     onFast(packet) {
-        if (!Number.isInteger(packet.n)) return;
+        if (!Number.isInteger(packet.n) || packet.n < 1) return;
+
+        // Packet loss measurement. FAST packets are numbered 1, 2, 3... by the sender and never
+        // resent, so a jump from n=10 to n=13 means 11 and 12 were lost (or are late). A late one
+        // that shows up afterwards was not lost after all, so it is taken back out of the count.
+        this.stats.fastReceived++;
+        if (packet.n > this.highestFastN) {
+            this.stats.fastLost += packet.n - this.highestFastN - 1;
+            this.highestFastN = packet.n;
+        } else if (this.stats.fastLost > 0) {
+            this.stats.fastLost--;
+        }
+
         // Positions are grouped per player, so an old position of player A never overwrites a
         // newer position of player A, but does not hide positions of player B.
         const key = packet.type + ':' + (packet.data && packet.data.id ? packet.data.id : '');
