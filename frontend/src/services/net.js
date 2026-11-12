@@ -2,16 +2,22 @@
 // The page's ONLY access to the network.
 //
 // A web page (and this React + Phaser UI is one) cannot open raw TCP or UDP sockets: browsers only
-// offer HTTP, WebSocket and WebRTC. So the real socket lives in Electron's MAIN process
-// (electron/tcpClient.cjs or electron/udpClient.cjs). This file does not do any networking itself:
-// it only talks to the main process through window.gameNet (electron/preload.cjs), which is
-// Electron IPC, a channel between two processes on the same computer.
+// offer HTTP, WebSocket and WebRTC. So the real socket (electron/tcpClient.cjs or udpClient.cjs) lives
+// in a Node.js process on the same computer, and this file only talks to that process:
 //
-//   net.emit('room:join', {roomId})  -> IPC -> main process -> TCP segment / UDP datagram -> server
-//   server -> socket -> main process -> IPC -> net.on('room:joined', handler)
+//   - WEB version (npm run tcp / udp): the page is served by the local agent (web/agent.cjs) and talks
+//     to it over HTTP on 127.0.0.1 (Server-Sent Events in, POST out). Loopback: never on the network.
+//   - DESKTOP version (npm run desktop:tcp / desktop:udp): Electron's preload script provides
+//     window.gameNet (electron/preload.cjs), and the page talks to the main process through IPC.
 //
-// Because the socket belongs to the main process, the connection survives a page reload; on load
-// we ask the main process for the current state with window.gameNet.info().
+// Both give the same small interface (send / onMessage / onStatus / onStats / info), so the rest of
+// the game code does not know which one it runs in.
+//
+//   net.emit('room:join', {roomId})  -> agent or main process -> TCP segment / UDP datagram -> server
+//   server -> socket -> agent or main process -> net.on('room:joined', handler)
+//
+// Because the socket belongs to that process, the connection survives a page reload; on load
+// we ask it for the current state with info().
 //
 // Special local events (never sent by the server):
 //   'connect'    (status)  the transport became connected
@@ -19,7 +25,70 @@
 //   'status'     (status)  any change: {state, sessionId, reason, proto, server, port, local}
 //   'stats'      (stats)   once per second: RTT, messages/bytes per second, retransmissions...
 
-const bridge = typeof window !== 'undefined' ? window.gameNet : undefined;
+/**
+ * The web version's bridge: same interface as Electron's window.gameNet, over the local agent
+ * (web/agent.cjs) that served this page. Only used when the page is served over http(s), not inside
+ * the Electron app.
+ */
+function createWebBridge() {
+    const subscribers = { msg: new Set(), status: new Set(), stats: new Set() };
+    const notify = (kind, payload) => subscribers[kind].forEach((fn) => fn(payload));
+    const subscribe = (kind) => (fn) => {
+        subscribers[kind].add(fn);
+        return () => subscribers[kind].delete(fn);
+    };
+
+    // Agent -> page: one long-lived Server-Sent Events stream. The browser reconnects by itself.
+    const events = new EventSource('/net/events');
+    events.addEventListener('msg', (e) => notify('msg', JSON.parse(e.data)));
+    events.addEventListener('status', (e) => notify('status', JSON.parse(e.data)));
+    events.addEventListener('stats', (e) => notify('stats', JSON.parse(e.data)));
+    events.onerror = () => notify('status', {
+        state: 'disconnected',
+        reason: 'local agent not reachable (is "npm run tcp" / "npm run udp" still running?)',
+    });
+
+    // Page -> agent: POST /net/send. Messages must reach the server in the order they were emitted
+    // (a kill after a move, a vote after a meeting start...), but parallel HTTP requests can overtake
+    // each other. So only one request is in flight at a time, and whatever was emitted meanwhile goes
+    // in the next one, as a batch.
+    let queue = [];
+    let sending = false;
+    async function flush() {
+        if (sending || queue.length === 0) return;
+        sending = true;
+        const batch = queue;
+        queue = [];
+        try {
+            const res = await fetch('/net/send', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(batch),
+            });
+            if (!res.ok) console.warn(`[net] agent refused ${batch.length} message(s): HTTP ${res.status}`);
+        } catch (err) {
+            console.warn(`[net] local agent not reachable, ${batch.length} message(s) dropped:`, err.message);
+        } finally {
+            sending = false;
+            flush();
+        }
+    }
+
+    return {
+        send(type, data) {
+            queue.push({ type, data });
+            flush();
+        },
+        onMessage: (fn) => subscribe('msg')((m) => fn(m.type, m.data)),
+        onStatus: subscribe('status'),
+        onStats: subscribe('stats'),
+        info: () => fetch('/net/info').then((r) => r.json()),
+    };
+}
+
+const bridge = typeof window === 'undefined' ? undefined
+    : window.gameNet                                         // desktop: Electron preload
+    || (/^https?:$/.test(window.location.protocol) ? createWebBridge() : undefined); // web: local agent
 
 /** @type {Map<string, Set<Function>>} message type -> handlers */
 const listeners = new Map();
@@ -37,7 +106,7 @@ function dispatch(type, ...args) {
 }
 
 const net = {
-    /** false when the page is opened in a normal browser instead of the Electron app */
+    /** false when there is no local agent / Electron process to talk to */
     available: Boolean(bridge),
     /** true once the transport is connected (TCP: after 'welcome'; UDP: after WELCOME) */
     connected: false,
@@ -76,7 +145,7 @@ const net = {
     /** Send one message to the server. The main process drops it if we are not connected. */
     emit(type, data = {}) {
         if (!bridge) {
-            console.warn(`[net] not running inside the Electron app, "${type}" not sent`);
+            console.warn(`[net] no local agent / Electron process, "${type}" not sent`);
             return;
         }
         bridge.send(type, data);

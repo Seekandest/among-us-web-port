@@ -204,8 +204,9 @@ function App() {
     return (
       <div id="app" style={{color: 'white', padding: 40, fontFamily: 'sans-serif', textAlign: 'center'}}>
         <h1>Among Us Arena</h1>
-        <p>This page needs the desktop client, which owns the TCP / UDP socket.</p>
-        <p>Start the game with <code>npm run tcp</code> or <code>npm run udp</code>.</p>
+        <p>This page needs the local client agent, which owns the TCP / UDP socket.</p>
+        <p>Start the game with <code>npm run tcp</code> or <code>npm run udp</code> in the frontend folder,
+          then open the address it prints (http://localhost:8080).</p>
       </div>
     );
   }
