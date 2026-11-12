@@ -49,6 +49,8 @@ export function Menu({onJoinGame}) {
     const onPlayerRegistered = (data) => {
       // The server issued this id. The client never chooses it.
       if (data?.playerId) sessionStorage.setItem('playerId', data.playerId);
+      // Login is case-insensitive: show the account's name as the server stored it ("alice" -> "Alice").
+      if (data?.name) setPlayerName(data.name);
       console.log('Player registered', data?.playerId);
       isRegisteredRef.current = true;
       setIsRegistered(true);

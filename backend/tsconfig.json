@@ -1,6 +1,13 @@
-// tsconfig.json
+// tsconfig.json - editor type-checking only (the server runs as plain JavaScript with Node)
 {
-    "allowJs": true,
-    "checkJs": true,
-    "strict": true
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "strict": true,
+        "noEmit": true,
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "target": "es2022"
+    },
+    "include": ["src/**/*.js"]
 }
