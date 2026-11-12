@@ -116,8 +116,12 @@ happened. Refusals come back privately as `game:notif`.
 When a player registers or logs in, the server checks the password (stored as a scrypt hash in
 `backend/data/users.json`) and binds that account's player id to their session. The client does not
 choose the id. Later messages carry no player id: a client cannot act on behalf of someone else.
-Movement is checked on the server: a position outside the map, or faster than the client is allowed
-to walk (350 px/s in the lobby, 100 px/s in a game), is dropped.
+The password is hashed with `crypto.scrypt` and a per-user random salt, off the main thread, so a login
+never pauses the game for the other players.
+Movement is checked on the server, whose position is authoritative: a position outside the map is
+clamped to the map bounds, and a move faster than the client is allowed to walk (350 px/s in the lobby,
+100 px/s in a game) is refused. In both cases the sender gets the server's position back
+(`player:moved` with `corrected: true`). The limits are in [`backend/src/config.js`](backend/src/config.js).
 
 **Wire format: readable JSON**, so every message can be read directly in Wireshark:
 ```json
@@ -222,7 +226,7 @@ headers). The client binds a port chosen by the OS (`bind(0)`).
 | `t` | Direction | Purpose |
 |---|---|---|
 | `HELLO` | client → server | "I want a session" (sent every 1 s until answered) |
-| `WELCOME {sessionId}` | server → client | session created |
+| `WELCOME {sessionId, tok}` | server → client | session created; `tok` = random session token. Every later datagram, in both directions, carries it, and a datagram from the right `ip:port` with a wrong or missing token is dropped (a forged source address is not enough to act as a client) |
 | `PING {ts}` / `PONG {ts}` | client → server / back | heartbeat + RTT |
 | `MSG {seq, type, data}` | both | **reliable** game message (needs an ACK) |
 | `ACK {seq}` | both | "I received MSG number `seq`" |
@@ -435,6 +439,9 @@ cd frontend; npm run tcp        # terminals 2, 3, 4: one game window each (serve
 4. Start the server, then each client with `--server 192.168.1.20` (sections 5 and 6).
 
 ### Four computers on different networks (bonus: Tailscale)
+**Full runbook: [docs/TAILSCALE.md](docs/TAILSCALE.md)** (install, key expiry, firewall scripts, direct vs
+DERP check, metrics, ZeroTier backup, pre-demo checklist). Short version:
+
 Tailscale builds a private virtual network (WireGuard tunnels) between the laptops, wherever they are.
 1. Install Tailscale on the 4 computers and log in to the same tailnet.
 2. On the server: `tailscale ip -4` → e.g. `100.101.102.103`.
@@ -452,6 +459,11 @@ Give the same `--port` to the server and the clients: `npm run tcp -- --port 600
 All client options: `--proto tcp|udp`, `--server <ip>`, `--port <n>`, `--loss <0..1>` (UDP only),
 `--dev` (load the UI from the Vite dev server, `npm run dev`, for UI work).
 
+The server address is never hard-coded. A client takes the first one it finds: `--server` / `--port`, then the
+environment variables `GAME_SERVER` / `GAME_PORT`, then `frontend/server.json` (written by
+`scripts/set-server.ps1 -Ip <ip>`, see [`frontend/server.example.json`](frontend/server.example.json)),
+then `127.0.0.1`. The server reads its port from `--port` or `GAME_PORT`.
+
 ---
 
 ## 8. Watching the network: HUD, statistics, Wireshark
@@ -463,8 +475,11 @@ TCP → 192.168.1.20:5000 · connected · RTT 2 ms · ↑22 ↓40 msg/s · relia
 ```
 
 **CSV statistics.** Each client writes one line per second to `frontend/netstats-<tcp|udp>-<pid>.csv`:
-`time, proto, state, rttMs, msgsOut, msgsIn, bytesOut, bytesIn, retransmits, duplicatesIgnored, outOfOrderBuffered, staleDropped, simulatedLoss`.
-The last five columns are empty for TCP: there, retransmissions happen inside the OS and are only visible
+`time, proto, server, state, rttMs, msgsOutPerSec, msgsInPerSec, msgsOut, msgsIn, bytesOut, bytesIn, fastLost, lossPct, retransmits, duplicatesIgnored, outOfOrderBuffered, staleDropped, simulatedLoss`.
+`fastLost` / `lossPct` = position datagrams that never arrived (gaps in their counter), UDP only.
+`node tools/summarize-netstats.mjs frontend/netstats-*.csv` turns them into RTT avg/p95/max, jitter,
+messages/s and loss % per run.
+The UDP-only columns (`fastLost` onwards) are empty for TCP: there, retransmissions happen inside the OS and are only visible
 in Wireshark. The server prints per-client statistics every 10 seconds.
 
 **Wireshark.** Capture on the interface carrying the game (Wi-Fi/Ethernet on a LAN, the **Tailscale**
