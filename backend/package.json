@@ -4,8 +4,8 @@
     "description": "Among Us Arena game server: TCP version (net) and UDP version (dgram), no networking libraries",
     "main": "src/main.js",
     "scripts": {
-        "tcp": "node src/main.js --proto tcp --port 5000",
-        "udp": "node src/main.js --proto udp --port 5001"
+        "tcp": "node src/main.js --proto tcp",
+        "udp": "node src/main.js --proto udp"
     },
     "keywords": [],
     "author": "",

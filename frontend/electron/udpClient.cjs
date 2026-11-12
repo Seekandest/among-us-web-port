@@ -5,7 +5,10 @@
 // UDP gives us much less than TCP: each send() is one independent datagram that may be LOST,
 // DUPLICATED or arrive OUT OF ORDER, and there is no connection, so nobody tells us when the
 // server goes away. Everything TCP did in the kernel, we do here, in our own code:
-//   - "connection":   HELLO every 1 s until the server answers WELCOME {sessionId}
+//   - "connection":   HELLO every 1 s until the server answers WELCOME {sessionId, tok}
+//   - identity:       "tok" is a random session token chosen by the server. We put it in every
+//                     datagram we send, and ignore datagrams from the server that don't carry it
+//                     (the only exception is a token-less BYE "unknown session, send HELLO").
 //   - reliability:    shared/reliableUdp.cjs (seq numbers, ACKs, retransmission, ordering, dedupe)
 //                     for game events; positions use unreliable FAST packets (a lost one is replaced
 //                     50 ms later, resending it would be useless)
@@ -15,7 +18,8 @@
 //
 // Datagrams on the wire (one JSON object each, field "t" = packet kind):
 //   {"t":"HELLO"}                                 client -> server
-//   {"t":"WELCOME","sessionId":"udp-2","proto":"udp"} server -> client
+//   {"t":"WELCOME","sessionId":"udp-2","proto":"udp","tok":"9f2c..."} server -> client
+//   every datagram after WELCOME, in both directions, also carries "tok":"9f2c..."
 //   {"t":"PING","ts":1731270000000} / {"t":"PONG","ts":...}
 //   {"t":"BYE","reason":"..."}                    either direction
 //   {"t":"MSG","seq":7,"type":"room:join","data":{...}}  reliable    (needs an ACK)
@@ -39,7 +43,7 @@ const TICK_MS = 50;
 // counters of the old channels to keep totals that only go up (nicer for the CSV / slides).
 const CHANNEL_COUNTERS = [
     'reliableSent', 'fastSent', 'retransmits', 'acksReceived',
-    'duplicatesIgnored', 'outOfOrderBuffered', 'staleDropped',
+    'duplicatesIgnored', 'outOfOrderBuffered', 'staleDropped', 'fastReceived', 'fastLost',
 ];
 
 function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
@@ -49,6 +53,7 @@ function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
 
     let state = 'connecting';
     let sessionId = null;
+    let token = null;             // session token from WELCOME, sent back in every datagram
     let reason = null;
     let local = null;
     let channel = null;           // ReliableChannel, only while connected
@@ -79,7 +84,7 @@ function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
             counters.simulatedLoss++;
             return;
         }
-        const bytes = Buffer.from(JSON.stringify(packet));
+        const bytes = Buffer.from(JSON.stringify(token && packet.t !== 'HELLO' ? { ...packet, tok: token } : packet));
         if (bytes.length > MAX_DATAGRAM_BYTES) {
             console.warn(`[UDP] ${bytes.length}-byte datagram (${packet.type || packet.t}) may be fragmented by IP`);
         }
@@ -88,8 +93,9 @@ function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
         socket.send(bytes, port, host);
     }
 
-    function connected(newSessionId) {
+    function connected(newSessionId, newToken) {
         sessionId = newSessionId;
+        token = newToken;
         lastHeardAt = Date.now();
         // A fresh channel for a fresh session: both sides start their sequence numbers at 1 again.
         channel = new ReliableChannel({
@@ -110,6 +116,7 @@ function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
         }
         channel = null;
         sessionId = null;
+        token = null;
         console.log(`[UDP] disconnected: ${why}`);
         setState('disconnected', why);
     }
@@ -133,17 +140,23 @@ function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
         if (!packet || typeof packet.t !== 'string') return;
 
         if (packet.t === 'WELCOME') {
+            if (typeof packet.tok !== 'string' || !packet.tok) return; // not a valid WELCOME
             if (state !== 'connected') {
-                connected(packet.sessionId);
+                connected(packet.sessionId, packet.tok);
             } else if (packet.sessionId !== sessionId) {
                 // A late WELCOME for a newer HELLO: the server restarted our session (its sequence
                 // numbers are back to 1), so ours must restart too.
                 reset('server restarted the session');
-                connected(packet.sessionId);
+                connected(packet.sessionId, packet.tok);
             }
             return;
         }
         if (state !== 'connected') return; // anything else before WELCOME is stale: ignore it
+
+        // Only a token-less BYE may come without our token: the server sends it to addresses it
+        // does not know (it restarted, or timed us out), and then it cannot know our token.
+        const tokenlessBye = packet.t === 'BYE' && packet.tok === undefined;
+        if (packet.tok !== token && !tokenlessBye) return; // forged, or from an older session
 
         lastHeardAt = Date.now();
         if (packet.t === 'PONG') {
@@ -226,7 +239,7 @@ function createUdpClient({ host, port, loss = 0, onMessage, onStatus }) {
             [helloTimer, pingTimer, tickTimer, rateTimer].forEach(clearInterval);
             setState('disconnected', 'closed by user');
             if (wasConnected) {
-                const bye = Buffer.from(JSON.stringify({ t: 'BYE', reason: 'client quit' }));
+                const bye = Buffer.from(JSON.stringify({ t: 'BYE', reason: 'client quit', tok: token }));
                 // Close the socket only once the datagram has been handed to the OS.
                 socket.send(bye, port, host, () => socket.close());
             } else {
