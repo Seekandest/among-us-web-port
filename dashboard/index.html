@@ -5,48 +5,106 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Among Us Arena: one game, two transports</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="title.css">
 </head>
 <body>
 <canvas id="stars" aria-hidden="true"></canvas>
 
 <main class="stage" id="stage">
 
-<!-- ================= 1. TITLE ================= -->
+<!-- ================= 1. TITLE: the arcade cabinet =================
+     Markup only; title.js draws the dot-matrix text, the glossy crewmates, the voxel
+     crewmates, the marquee bulbs and the dust. title.css holds the look and the motion. -->
 <section class="slide s1" data-steps="0" data-hud="TCP :5000 · UDP :5001 · Node net + dgram only">
   <div class="inner">
-    <p class="kicker">Computer Networks · Project 2 · 13 Nov 2026</p>
-    <h1 class="brand">AmongUs</h1>
-    <p class="tagline">One game. Two transports.</p>
-    <p class="sub">Built twice on raw sockets: once <b class="t">TCP only</b>, once <b class="u">UDP only</b>.</p>
+    <h1 class="sr">Among Us Arena: one game, two transports. Computer Networks, Project 2, 13 Nov 2026.</h1>
 
-    <div class="s1-lanes">
-      <div class="lane glass tcp">
-        <span class="num" aria-hidden="true">5000</span>
-        <p class="tag"><b>TCP</b> · net · one ordered stream</p>
-        <div class="pipe"></div>
-        <div class="file">
-          <div class="carry"><code class="cap">seq 3</code><i class="crew walk" style="--c:var(--tcp)"></i></div>
-          <div class="carry"><code class="cap">seq 2</code><i class="crew walk" style="--c:var(--tcp)"></i></div>
-          <div class="carry"><code class="cap">seq 1</code><i class="crew walk" style="--c:var(--tcp)"></i></div>
+    <!-- back: heat glow, light rays, two out-of-focus cabinets, one ejected crewmate drifting by -->
+    <div class="arc-bg" aria-hidden="true">
+      <div class="halo"></div>
+      <div class="rays"></div>
+      <div class="bgcab l"><div class="bgscr"><i class="crew" style="--c:var(--tcp);--w:44px"></i></div></div>
+      <div class="bgcab r"><div class="bgscr"><i class="crew" style="--c:var(--udp);--w:44px"></i></div></div>
+      <div class="drift"><i class="amg" style="--c:#B79CFF"></i></div>
+      <div class="dust"></div>
+    </div>
+
+    <!-- top strip, after the poster's channel line -->
+    <p class="arc-top">
+      <span class="mini lead" aria-hidden="true"><i class="crew walk" style="--c:var(--tcp);--w:36px"></i></span>
+      <span class="pips tcp" aria-hidden="true"></span>
+      <span>CS411 · Computer Networks · Project 2 · 13 Nov 2026</span>
+      <span class="pips udp" aria-hidden="true"></span>
+      <span class="mini crew4" aria-hidden="true">
+        <i class="crew" style="--c:#7FA8FF;--w:26px"></i><i class="crew" style="--c:#E8EDFF;--w:26px"></i><i class="crew" style="--c:#B79CFF;--w:26px"></i><i class="crew" style="--c:#FF8AD8;--w:26px"></i>
+      </span>
+    </p>
+
+    <!-- the cabinet: real CSS 3D (wings, tilted control panel, apron) -->
+    <div class="scene">
+      <div class="cab">
+        <div class="wing l" aria-hidden="true"><div class="wface"></div></div>
+        <div class="wing r" aria-hidden="true"><div class="wface"></div></div>
+
+        <div class="marquee">
+          <div class="bulbs top" aria-hidden="true"></div>
+          <div class="mqrow" role="img" aria-label="TCP versus UDP"><span class="dm mq tcp" data-dm="TCP" data-dot="11"></span><span class="dm mq vs" data-dm="VS" data-dot="11"></span><span class="dm mq udp" data-dm="UDP" data-dot="11"></span></div>
+          <div class="bulbs bot" aria-hidden="true"></div>
         </div>
-      </div>
-      <div class="lane glass udp">
-        <span class="num" aria-hidden="true">5001</span>
-        <p class="tag"><b>UDP</b> · dgram · independent datagrams</p>
-        <div class="run r1"><code class="cap">n 41</code><i class="crew walk" style="--c:var(--udp)"></i></div>
-        <div class="run r2"><code class="cap">n 42</code><i class="crew walk" style="--c:var(--udp)"></i></div>
-        <div class="run r3"><code class="cap">n 43</code><i class="crew walk" style="--c:var(--udp)"></i></div>
-        <p class="ejnote">n 42 was ejected.</p>
+
+        <div class="bezel">
+          <div class="screen">
+            <i class="coin c1" aria-hidden="true"></i><i class="coin c2" aria-hidden="true"></i>
+            <i class="coin c3" aria-hidden="true"></i><i class="coin c4" aria-hidden="true"></i>
+            <div class="lines" role="img" aria-label="Among Us Arena. One game, two transports.">
+              <span class="dm big" data-dm="AMONG US" data-dot="14"></span>
+              <span class="dm big" data-dm="ARENA" data-dot="14"></span>
+              <span class="dm sm" data-dm="ONE GAME · TWO TRANSPORTS" data-dot="5"></span>
+            </div>
+            <div class="scan" aria-hidden="true"></div>
+            <div class="glare" aria-hidden="true"></div>
+          </div>
+          <p class="credits">Raw sockets · 0 backend deps · 1 server + 3 clients · 4 PCs</p>
+        </div>
+
+        <div class="panel" aria-hidden="true">
+          <div class="joy tcp" style="--x:150px"><i class="jbase"></i><i class="shaft"><b class="ball"></b></i></div>
+          <div class="btns" style="--x:250px"><i class="btn r"></i><i class="btn y"></i><i class="btn b"></i><i class="btn r"></i><i class="btn y"></i><i class="btn b"></i></div>
+          <div class="joy udp" style="--x:590px"><i class="jbase"></i><i class="shaft"><b class="ball"></b></i></div>
+          <div class="btns" style="--x:690px"><i class="btn r"></i><i class="btn y"></i><i class="btn b"></i><i class="btn r"></i><i class="btn y"></i><i class="btn b"></i></div>
+        </div>
+
+        <div class="apron">
+          <p class="plabels"><b class="t">P1 · TCP <code>:5000</code></b><span>Node <code>net</code> + <code>dgram</code> only</span><b class="u">UDP <code>:5001</code> · P2</b></p>
+          <div class="arow">
+            <div class="pslot"><i class="crew" style="--c:#7FA8FF;--w:40px"></i><span class="edit" data-edit="m1" contenteditable="true" spellcheck="false">Member 1</span></div>
+            <div class="pslot"><i class="crew" style="--c:#E8EDFF;--w:40px"></i><span class="edit" data-edit="m2" contenteditable="true" spellcheck="false">Member 2</span></div>
+            <div class="coindoor" aria-hidden="true">
+              <div class="slotplate"><i></i><i></i></div>
+              <p>Insert packet</p>
+              <span class="price">1 PKT<br>to play</span>
+            </div>
+            <div class="pslot"><i class="crew" style="--c:#B79CFF;--w:40px"></i><span class="edit" data-edit="m3" contenteditable="true" spellcheck="false">Member 3</span></div>
+            <div class="pslot"><i class="crew" style="--c:#FF8AD8;--w:40px"></i><span class="edit" data-edit="m4" contenteditable="true" spellcheck="false">Member 4</span></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="s1-foot">
-      <div class="chips">
-        <span class="chip">Node net + dgram only</span>
-        <span class="chip">0 backend dependencies</span>
-        <span class="chip">1 server + 3 clients · 4 computers</span>
-      </div>
-      <p class="team"><span class="edit" data-edit="m1" contenteditable="true" spellcheck="false">Member 1</span> · <span class="edit" data-edit="m2" contenteditable="true" spellcheck="false">Member 2</span> · <span class="edit" data-edit="m3" contenteditable="true" spellcheck="false">Member 3</span> · <span class="edit" data-edit="m4" contenteditable="true" spellcheck="false">Member 4</span></p>
+    <!-- front: giant voxel crewmates (where the poster has its two big pixel heroes) -->
+    <div class="vox l" aria-hidden="true"><div class="vbody" data-px="19"></div></div>
+    <div class="vox r" aria-hidden="true"><div class="vbody" data-px="24"></div></div>
+
+    <!-- the flying cast, in place of the poster's ghosts (depth = parallax strength) -->
+    <div class="flyers" aria-hidden="true">
+      <div class="par" style="--x:612px;--y:186px;--d:10"><div class="fly" style="--w:104px;--r:-9deg;--t:3.1s;--k:0"><i class="amg" style="--c:#FF8AD8"></i></div></div>
+      <div class="par" style="--x:752px;--y:176px;--d:7"><div class="fly" style="--w:82px;--r:7deg;--t:2.7s;--k:1"><i class="amg" style="--c:#7FA8FF"></i></div></div>
+      <div class="par" style="--x:876px;--y:196px;--d:8"><div class="fly" style="--w:80px;--r:-4deg;--t:3.4s;--k:2"><i class="amg" style="--c:#E8EDFF"></i></div></div>
+      <div class="par" style="--x:992px;--y:180px;--d:6"><div class="fly" style="--w:62px;--r:10deg;--t:2.5s;--k:3"><i class="amg" style="--c:#FF3B4E"></i></div></div>
+      <div class="par" style="--x:1110px;--y:174px;--d:11"><div class="fly" style="--w:108px;--r:6deg;--t:3.6s;--k:4"><i class="amg" style="--c:#B79CFF"></i></div></div>
+      <div class="par soft" style="--x:120px;--y:520px;--d:4"><div class="fly" style="--w:70px;--r:-14deg;--t:4.2s;--k:5"><i class="amg" style="--c:#FF8AD8"></i></div></div>
+      <div class="par" style="--x:1540px;--y:520px;--d:16"><div class="fly" style="--w:230px;--r:-8deg;--t:4.6s;--k:6"><i class="amg" style="--c:#FF8A1F"></i></div></div>
+      <div class="par fg" style="--x:-150px;--y:600px;--d:30"><div class="fly" style="--w:470px;--r:12deg;--t:6s;--k:7"><i class="amg" style="--c:#38FEDC"></i></div></div>
     </div>
   </div>
   <p class="say" hidden>Good morning. We are four, and this is Among Us Arena: a competitive game for three players, one imposter against two crewmates, where every player has a personal score. We built it twice with the same rules: once on TCP only, once on UDP only, using nothing but Node's net and dgram modules. Everything we show today is either what each protocol gave us for free, or what we had to build ourselves.</p>
@@ -545,6 +603,7 @@ transport.send(sessionId, type, data)</pre>
 <aside class="notes glass" id="notes" hidden></aside>
 
 </main>
+<script src="title.js"></script>
 <script src="deck.js"></script>
 </body>
 </html>
