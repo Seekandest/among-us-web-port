@@ -206,14 +206,15 @@ export class Game extends BaseGameScene {
             // The body gets the VICTIM's color, sent by the server (data.color).
 
             const deathAnim = this.add.sprite(data.x, data.y, 'death', 'Dead0001.png')
-                .setScale(0.125)
-                .setDepth(600);
+                .setScale(0.125);
             setPlayerColor(this, deathAnim, data.color);
+            this.addToWorld(deathAnim);
             deathAnim.anims.play('deathAnim');
             deathAnim.on('animationcomplete', () => {
-                this.add.sprite(deathAnim.x, deathAnim.y, 'deadBody')
-                    .setScale(0.125)
-                    .setDepth(500);
+                const body = this.add.sprite(deathAnim.x, deathAnim.y, 'deadBody')
+                    .setScale(0.125);
+                setPlayerColor(this, body, data.color);   // the body keeps the victim's color
+                this.addToWorld(body);
                 deathAnim.destroy();
             });
         };
@@ -277,6 +278,18 @@ export class Game extends BaseGameScene {
         net.on('meeting:started', this.onMeetingStarted);
         net.on('meeting:ended', this.onMeetingEnded);
         net.on('game:ended', this.onGameEnd);
+    }
+
+    /**
+     * Put a map object (death animation, dead body) in the world container.
+     * The scene has two cameras: the main one (zoomed, follows the player) and a fixed UI camera
+     * (buttons) that ignores worldContainer. An object added directly to the scene is drawn by BOTH,
+     * so the body appeared twice: once in the right place and once smaller, elsewhere on the screen.
+     * Inserted just above the map background, so living players walk over the bodies.
+     */
+    addToWorld(sprite) {
+        const index = this.background ? this.worldContainer.getIndex(this.background) + 1 : 0;
+        this.worldContainer.addAt(sprite, index);
     }
 
     // MEETING MECHANICS

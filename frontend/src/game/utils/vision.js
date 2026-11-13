@@ -68,11 +68,13 @@ export function disableVisionSystem(scene) {
     });
 
     // Show all dead bodies
-    scene.children.list.forEach(child => {
-        if (child.texture && child.texture.key === 'deadBody') {
-            child.visible = true;
-        }
-    });
+    deadBodies(scene).forEach(body => { body.visible = true; });
+}
+
+/** Dead bodies live in worldContainer (Game.addToWorld), older code put them directly in the scene. */
+function deadBodies(scene) {
+    const all = [...scene.children.list, ...(scene.worldContainer ? scene.worldContainer.list : [])];
+    return all.filter(child => child.texture && child.texture.key === 'deadBody');
 }
 
 /**
@@ -137,15 +139,8 @@ export function updateVisionSystem(scene) {
     });
 
     // Hide dead bodies outside vision radius
-    scene.children.list.forEach(child => {
-        if (child.texture && child.texture.key === 'deadBody') {
-            const dist = Phaser.Math.Distance.Between(
-                scene.player.x,
-                scene.player.y,
-                child.x,
-                child.y
-            );
-            child.visible = dist <= scene.VISION_RADIUS;
-        }
+    deadBodies(scene).forEach(body => {
+        const dist = Phaser.Math.Distance.Between(scene.player.x, scene.player.y, body.x, body.y);
+        body.visible = dist <= scene.VISION_RADIUS;
     });
 }
