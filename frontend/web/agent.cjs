@@ -242,7 +242,9 @@ function listen(portToTry, attemptsLeft) {
     // failed attempt's handler would also fire when a later attempt succeeds.
     const onError = (err) => {
         web.off('listening', onListening);
-        if (err.code === 'EADDRINUSE' && attemptsLeft > 0) return listen(portToTry + 1, attemptsLeft - 1);
+        // Windows reports EACCES (not EADDRINUSE) when another app, e.g. Apache, holds 0.0.0.0:<port>.
+        const busy = err.code === 'EADDRINUSE' || err.code === 'EACCES';
+        if (busy && attemptsLeft > 0) return listen(portToTry + 1, attemptsLeft - 1);
         console.error(`[agent] cannot open the local web port: ${err.message}`);
         process.exit(1);
     };
